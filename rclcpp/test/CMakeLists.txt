@@ -100,6 +100,7 @@ if(TARGET test_create_subscription)
   target_link_libraries(test_create_subscription ${PROJECT_NAME})
   ament_target_dependencies(test_create_subscription
     "test_msgs"
+    "rcl_interfaces"
   )
 endif()
 ament_add_gtest(test_add_callback_groups_to_executor rclcpp/test_add_callback_groups_to_executor.cpp)
@@ -107,6 +108,7 @@ if(TARGET test_add_callback_groups_to_executor)
   target_link_libraries(test_add_callback_groups_to_executor ${PROJECT_NAME})
   ament_target_dependencies(test_add_callback_groups_to_executor
     "test_msgs"
+    "rcl_interfaces"
   )
 endif()
 ament_add_gtest(test_expand_topic_or_service_name rclcpp/test_expand_topic_or_service_name.cpp)
@@ -170,12 +172,14 @@ endif()
 ament_add_gtest(test_loaned_message rclcpp/test_loaned_message.cpp)
 ament_target_dependencies(test_loaned_message
   "test_msgs"
+  "rcl_interfaces"
 )
 target_link_libraries(test_loaned_message ${PROJECT_NAME} mimick)
 
 ament_add_gtest(test_memory_strategy rclcpp/test_memory_strategy.cpp)
 ament_target_dependencies(test_memory_strategy
   "test_msgs"
+  "rcl_interfaces"
 )
 target_link_libraries(test_memory_strategy ${PROJECT_NAME})
 
@@ -218,7 +222,9 @@ ament_add_gtest(test_node_interfaces__node_graph
 if(TARGET test_node_interfaces__node_graph)
   ament_target_dependencies(
     test_node_interfaces__node_graph
-    "test_msgs")
+    "test_msgs"
+    "rcl_interfaces"
+  )
   target_link_libraries(test_node_interfaces__node_graph ${PROJECT_NAME} mimick)
 endif()
 ament_add_gtest(test_node_interfaces__node_parameters
@@ -386,7 +392,8 @@ endif()
 ament_add_gtest(test_serialized_message_allocator rclcpp/test_serialized_message_allocator.cpp)
 if(TARGET test_serialized_message_allocator)
   ament_target_dependencies(test_serialized_message_allocator
-    test_msgs
+    "test_msgs"
+    "rcl_interfaces"
   )
   target_link_libraries(test_serialized_message_allocator
     ${PROJECT_NAME}
@@ -590,7 +597,10 @@ endif()
 ament_add_gtest(test_wait_set rclcpp/test_wait_set.cpp
   APPEND_LIBRARY_DIRS "${append_library_dirs}")
 if(TARGET test_wait_set)
-  ament_target_dependencies(test_wait_set "test_msgs")
+  ament_target_dependencies(test_wait_set
+    "test_msgs"
+    "rcl_interfaces"
+  )
   target_link_libraries(test_wait_set ${PROJECT_NAME})
 endif()
 
