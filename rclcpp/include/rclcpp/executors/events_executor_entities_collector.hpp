@@ -19,6 +19,7 @@
 #include <memory>
 
 #include "rclcpp/executors/timers_manager.hpp"
+#include "rclcpp/experimental/executable_list.hpp"
 #include "rclcpp/node_interfaces/node_base_interface.hpp"
 #include "rclcpp/waitable.hpp"
 
@@ -103,6 +104,8 @@ private:
 
   /// List of weak nodes registered in the events executor
   std::list<rclcpp::node_interfaces::NodeBaseInterface::WeakPtr> weak_nodes_;
+  /// Executable list: timers, subscribers, clients, services and waitables
+  rclcpp::experimental::ExecutableList exec_list_;
   /// Executor using this entities collector object
   EventsExecutor * associated_executor_ = nullptr;
   /// Instance of the timers manager used by the associated executor

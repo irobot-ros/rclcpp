@@ -20,6 +20,8 @@
 #include "rclcpp/executors/events_executor.hpp"
 
 #include "test_msgs/srv/empty.hpp"
+#include "test_msgs/msg/empty.hpp"
+
 
 using namespace std::chrono_literals;
 
@@ -282,3 +284,51 @@ TEST_F(TestEventsExecutor, cancel_while_timers_waiting)
 
   EXPECT_EQ(0u, t1_runs);
 }
+
+/*
+TEST_F(TestEventsExecutor, new_test)
+{
+  EventsExecutor executor;
+  std::thread spinner;
+  std::weak_ptr<SubscriptionBase> t_weak;
+
+  auto callback = [](test_msgs::msg::Empty::SharedPtr msg) {(void)msg;};
+
+  {
+    auto node = std::make_shared<rclcpp::Node>("node");
+    auto sub1 = node->create_subscription<test_msgs::msg::Empty>("topic",rclcpp::QoS(10), std::move(callback));
+    t_weak = sub1;
+
+    std::cout<<"Adding sub1"<<std::endl;
+    executor.add_node(node);
+    spinner = std::thread([&executor, this]() {executor.spin();});
+    std::this_thread::sleep_for(15ms);
+
+    {
+      std::cout<<"Adding sub2"<<std::endl;
+      auto sub2 = node->create_subscription<test_msgs::msg::Empty>("topic2",rclcpp::QoS(10), std::move(callback));
+      std::this_thread::sleep_for(50ms);
+
+
+    }
+
+      if (!t_weak.lock()) {
+        std::cout<< "sub 1 still valid"<<std::endl;
+      }
+
+
+      std::cout<< "Now sub 2 out of scope"<<std::endl;
+      std::this_thread::sleep_for(50ms);
+      std::cout<<"exiting first guard"<<std::endl;
+  }
+    std::cout<< "Now sub 1 and node out of scope"<<std::endl;
+
+    std::this_thread::sleep_for(100ms);
+
+
+    executor.cancel();
+    std::cout<<"joining"<<std::endl;
+    spinner.join();
+
+}
+*/

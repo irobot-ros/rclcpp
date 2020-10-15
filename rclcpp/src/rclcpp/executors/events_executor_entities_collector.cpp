@@ -39,17 +39,17 @@ EventsExecutorEntitiesCollector::~EventsExecutorEntitiesCollector()
     }
   }
 
-  // Make sure that the list is empty
+  // Make sure that all the entities have been removed
+  timers_manager_->clear_all();
   weak_nodes_.clear();
+  exec_list_.clear();
 }
 
 void
 EventsExecutorEntitiesCollector::execute()
 {
-  // This function is called when the associated executor is notified that something changed.
-  // We do not know if an entity has been added or remode so we have to rebuild everything.
-
-  timers_manager_->clear_all();
+  // This function is called when the associated executor is notified that something has changed.
+  // This currently can only correspond to an entity being added to a node.
 
   for (auto & weak_node : weak_nodes_) {
     auto node = weak_node.lock();
@@ -71,9 +71,9 @@ EventsExecutorEntitiesCollector::add_node(
     throw std::runtime_error("Node has already been added to an executor.");
   }
 
-  weak_nodes_.push_back(node_ptr);
-
   set_entities_callbacks(node_ptr);
+
+  weak_nodes_.push_back(node_ptr);
 }
 
 void
@@ -96,9 +96,9 @@ EventsExecutorEntitiesCollector::remove_node(
   std::atomic_bool & has_executor = node_ptr->get_associated_with_executor_atomic();
   has_executor.store(false);
 
-  weak_nodes_.erase(node_it);
-
   unset_entities_callbacks(node_ptr);
+
+  weak_nodes_.erase(node_it);
 }
 
 void
@@ -117,6 +117,8 @@ EventsExecutorEntitiesCollector::set_entities_callbacks(
     group->find_timer_ptrs_if(
       [this](const rclcpp::TimerBase::SharedPtr & timer) {
         if (timer) {
+          // Timers are not added to the executable list,
+          // as the timer manager is in charge of keeping ownership.
           timers_manager_->add_timer(timer);
         }
         return false;
@@ -126,6 +128,7 @@ EventsExecutorEntitiesCollector::set_entities_callbacks(
     group->find_subscription_ptrs_if(
       [this](const rclcpp::SubscriptionBase::SharedPtr & subscription) {
         if (subscription) {
+          exec_list_.add_subscription(subscription);
           subscription->set_events_executor_callback(
             associated_executor_,
             &EventsExecutor::push_event);
@@ -135,6 +138,7 @@ EventsExecutorEntitiesCollector::set_entities_callbacks(
     group->find_service_ptrs_if(
       [this](const rclcpp::ServiceBase::SharedPtr & service) {
         if (service) {
+          exec_list_.add_service(service);
           service->set_events_executor_callback(
             associated_executor_,
             &EventsExecutor::push_event);
@@ -144,6 +148,7 @@ EventsExecutorEntitiesCollector::set_entities_callbacks(
     group->find_client_ptrs_if(
       [this](const rclcpp::ClientBase::SharedPtr & client) {
         if (client) {
+          exec_list_.add_client(client);
           client->set_events_executor_callback(
             associated_executor_,
             &EventsExecutor::push_event);
@@ -153,6 +158,7 @@ EventsExecutorEntitiesCollector::set_entities_callbacks(
     group->find_waitable_ptrs_if(
       [this](const rclcpp::Waitable::SharedPtr & waitable) {
         if (waitable) {
+          exec_list_.add_waitable(waitable);
           waitable->set_events_executor_callback(
             associated_executor_,
             &EventsExecutor::push_event);
@@ -162,16 +168,15 @@ EventsExecutorEntitiesCollector::set_entities_callbacks(
   }
 
   // Set an event callback for the node's notify guard condition, so if new entities are added
-  // or removed to this node we will receive an event.
+  // to this node we will receive an event.
   rcl_ret_t ret = rcl_guard_condition_set_events_executor_callback(
     associated_executor_,
     &EventsExecutor::push_event,
     this,
     node->get_notify_guard_condition(),
     false /* Discard previous events */);
-
   if (ret != RCL_RET_OK) {
-    throw std::runtime_error("Couldn't set node guard condition callback");
+    throw std::runtime_error("Couldn't set node's notify guard condition event callback");
   }
 }
 
@@ -191,6 +196,8 @@ EventsExecutorEntitiesCollector::unset_entities_callbacks(
     group->find_timer_ptrs_if(
       [this](const rclcpp::TimerBase::SharedPtr & timer) {
         if (timer) {
+          // Timers are not part of the executable list,
+          // as the timer manager is in charge of keeping ownership.
           timers_manager_->remove_timer(timer);
         }
         return false;
@@ -201,6 +208,7 @@ EventsExecutorEntitiesCollector::unset_entities_callbacks(
       [this](const rclcpp::SubscriptionBase::SharedPtr & subscription) {
         if (subscription) {
           subscription->set_events_executor_callback(nullptr, nullptr);
+          exec_list_.remove_subscription(subscription);
         }
         return false;
       });
@@ -208,6 +216,7 @@ EventsExecutorEntitiesCollector::unset_entities_callbacks(
       [this](const rclcpp::ServiceBase::SharedPtr & service) {
         if (service) {
           service->set_events_executor_callback(nullptr, nullptr);
+          exec_list_.remove_service(service);
         }
         return false;
       });
@@ -215,6 +224,7 @@ EventsExecutorEntitiesCollector::unset_entities_callbacks(
       [this](const rclcpp::ClientBase::SharedPtr & client) {
         if (client) {
           client->set_events_executor_callback(nullptr, nullptr);
+          exec_list_.remove_client(client);
         }
         return false;
       });
@@ -222,19 +232,19 @@ EventsExecutorEntitiesCollector::unset_entities_callbacks(
       [this](const rclcpp::Waitable::SharedPtr & waitable) {
         if (waitable) {
           waitable->set_events_executor_callback(nullptr, nullptr);
+          exec_list_.remove_waitable(waitable);
         }
         return false;
       });
   }
 
   // Unset the event callback for the node's notify guard condition, to stop receiving events
-  // if entities are added or removed to this node.
+  // if entities are added to this node.
   rcl_ret_t ret = rcl_guard_condition_set_events_executor_callback(
     nullptr, nullptr, nullptr,
     node->get_notify_guard_condition(),
     false);
-
   if (ret != RCL_RET_OK) {
-    throw std::runtime_error("Couldn't set node guard condition callback");
+    throw std::runtime_error("Couldn't unset node's notify guard condition event callback");
   }
 }
