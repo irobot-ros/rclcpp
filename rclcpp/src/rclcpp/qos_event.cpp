@@ -85,4 +85,12 @@ QOSEventHandlerBase::set_events_executor_callback(
   }
 }
 
+rmw_qos_profile_t
+QOSEventHandlerBase::get_actual_qos() const
+{
+  rmw_qos_profile_t qos;
+  qos.depth = 0;
+  return qos;
+}
+
 }  // namespace rclcpp

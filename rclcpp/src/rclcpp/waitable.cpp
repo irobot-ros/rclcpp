@@ -71,3 +71,10 @@ Waitable::set_events_executor_callback(
   throw std::runtime_error(
           "Custom waitables should override set_events_executor_callback() to use events executor");
 }
+
+rmw_qos_profile_t
+Waitable::get_actual_qos() const
+{
+  throw std::runtime_error(
+          "Custom waitables should override get_actual_qos() to use events executor");
+}

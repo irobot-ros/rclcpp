@@ -77,6 +77,8 @@ EventsExecutorEntitiesCollector::~EventsExecutorEntitiesCollector()
   weak_services_map_.clear();
   weak_waitables_map_.clear();
   weak_subscriptions_map_.clear();
+  qos_depth_waitables_map_.clear();
+  qos_depth_subscriptions_map_.clear();
   weak_nodes_to_guard_conditions_.clear();
   weak_groups_associated_with_executor_to_nodes_.clear();
   weak_groups_to_nodes_associated_with_executor_.clear();
@@ -234,9 +236,13 @@ EventsExecutorEntitiesCollector::set_callback_group_entities_callbacks(
   group->find_subscription_ptrs_if(
     [this](const rclcpp::SubscriptionBase::SharedPtr & subscription) {
       if (subscription) {
+        qos_depth_subscriptions_map_.emplace(
+          subscription.get(), subscription->get_actual_qos().depth());
+
         subscription->set_events_executor_callback(
           associated_executor_,
           &EventsExecutor::push_event);
+
         weak_subscriptions_map_.emplace(subscription.get(), subscription);
       }
       return false;
@@ -264,9 +270,13 @@ EventsExecutorEntitiesCollector::set_callback_group_entities_callbacks(
   group->find_waitable_ptrs_if(
     [this](const rclcpp::Waitable::SharedPtr & waitable) {
       if (waitable) {
+        qos_depth_waitables_map_.emplace(
+          waitable.get(), waitable->get_actual_qos().depth);
+
         waitable->set_events_executor_callback(
           associated_executor_,
           &EventsExecutor::push_event);
+
         weak_waitables_map_.emplace(waitable.get(), waitable);
       }
       return false;
@@ -292,6 +302,7 @@ EventsExecutorEntitiesCollector::unset_callback_group_entities_callbacks(
       if (subscription) {
         subscription->set_events_executor_callback(nullptr, nullptr);
         weak_subscriptions_map_.erase(subscription.get());
+        qos_depth_subscriptions_map_.erase(subscription.get());
       }
       return false;
     });
@@ -316,6 +327,7 @@ EventsExecutorEntitiesCollector::unset_callback_group_entities_callbacks(
       if (waitable) {
         waitable->set_events_executor_callback(nullptr, nullptr);
         weak_waitables_map_.erase(waitable.get());
+        qos_depth_waitables_map_.erase(waitable.get());
       }
       return false;
     });
@@ -520,6 +532,7 @@ EventsExecutorEntitiesCollector::get_subscription(const void * subscription_id)
 
     // The subscription expired, remove from map
     weak_subscriptions_map_.erase(it);
+    qos_depth_subscriptions_map_.erase(subscription_id);
   }
   return nullptr;
 }
@@ -577,6 +590,7 @@ EventsExecutorEntitiesCollector::get_waitable(const void * waitable_id)
 
     // The waitable expired, remove from map
     weak_waitables_map_.erase(it);
+    qos_depth_waitables_map_.erase(waitable_id);
   }
   return nullptr;
 }
@@ -584,5 +598,34 @@ EventsExecutorEntitiesCollector::get_waitable(const void * waitable_id)
 void
 EventsExecutorEntitiesCollector::add_waitable(rclcpp::Waitable::SharedPtr waitable)
 {
+  qos_depth_waitables_map_.emplace(waitable.get(), waitable->get_actual_qos().depth);
   weak_waitables_map_.emplace(waitable.get(), waitable);
+}
+
+size_t
+EventsExecutorEntitiesCollector::get_subscription_qos_depth(const void * subscription_id)
+{
+  auto it = qos_depth_subscriptions_map_.find(subscription_id);
+
+  if (it != qos_depth_subscriptions_map_.end()) {
+    size_t qos_depth = it->second;
+    return qos_depth;
+  }
+
+  // If the subscription_id is not present in the map, throw error
+  throw std::runtime_error("Event from subscription not registered in map!");
+}
+
+size_t
+EventsExecutorEntitiesCollector::get_waitable_qos_depth(const void * waitable_id)
+{
+  auto it = qos_depth_waitables_map_.find(waitable_id);
+
+  if (it != qos_depth_waitables_map_.end()) {
+    size_t qos_depth = it->second;
+    return qos_depth;
+  }
+
+  // If the waitable_id is not present in the map, throw error
+  throw std::runtime_error("Event from waitable not registered in map!");
 }

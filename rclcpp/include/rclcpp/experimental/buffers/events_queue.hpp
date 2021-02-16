@@ -89,7 +89,7 @@ public:
   RCLCPP_PUBLIC
   virtual
   void
-  init() = 0;
+  init(rclcpp::executors::EventsExecutorEntitiesCollector::SharedPtr entities_collector) = 0;
 
   /**
    * @brief gets a queue with all events accumulated on it since

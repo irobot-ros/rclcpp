@@ -215,6 +215,11 @@ public:
     const rclcpp::executors::EventsExecutor * executor,
     rmw_listener_callback_t executor_callback) const;
 
+  RCLCPP_PUBLIC
+  virtual
+  rmw_qos_profile_t
+  get_actual_qos() const;
+
 private:
   std::atomic<bool> in_use_by_wait_set_{false};
 };  // class Waitable

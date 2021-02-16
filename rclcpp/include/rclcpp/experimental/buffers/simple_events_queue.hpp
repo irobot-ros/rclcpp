@@ -95,8 +95,9 @@ public:
   RCLCPP_PUBLIC
   virtual
   void
-  init()
+  init(rclcpp::executors::EventsExecutorEntitiesCollector::SharedPtr entities_collector)
   {
+    (void)entities_collector;
     // Make sure the queue is empty when we start
     std::queue<rmw_listener_event_t> local_queue;
     std::swap(event_queue_, local_queue);

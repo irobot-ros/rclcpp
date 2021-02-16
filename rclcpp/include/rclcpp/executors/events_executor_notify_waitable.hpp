@@ -86,6 +86,21 @@ public:
     return nullptr;
   }
 
+  ///
+  /**
+   * Gets the QoS of this notify waitable.
+   * This is useful for the events executor, when it has to
+   * decide if keep pushing events from this waitable into the qeueue
+   */
+  RCLCPP_PUBLIC
+  rmw_qos_profile_t
+  get_actual_qos() const override
+  {
+    rmw_qos_profile_t qos;
+    qos.depth = 0;
+    return qos;
+  }
+
 private:
   std::list<const rcl_guard_condition_t *> notify_guard_conditions_;
 };
