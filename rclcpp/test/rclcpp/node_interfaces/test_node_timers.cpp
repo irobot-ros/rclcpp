@@ -32,7 +32,7 @@ public:
   : TimerBase(node->get_clock(), std::chrono::nanoseconds(1),
       node->get_node_base_interface()->get_context()) {}
 
-  void execute_callback() override {}
+  bool execute_callback() override {return false;}
   bool is_steady() override {return false;}
 };
 

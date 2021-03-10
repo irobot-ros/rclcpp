@@ -32,8 +32,9 @@ public:
   bool is_ready(rcl_wait_set_t *) override {return false;}
 
   std::shared_ptr<void>
-  take_data() override
+  take_data(const void * arg) override
   {
+    (void)arg;
     return nullptr;
   }
 

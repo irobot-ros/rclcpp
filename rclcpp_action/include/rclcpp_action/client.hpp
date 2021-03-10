@@ -16,6 +16,7 @@
 #define RCLCPP_ACTION__CLIENT_HPP_
 
 #include <rclcpp/exceptions.hpp>
+#include "rclcpp/executors/events_executor_event_types.hpp"
 #include <rclcpp/macros.hpp>
 #include <rclcpp/node_interfaces/node_base_interface.hpp>
 #include <rclcpp/node_interfaces/node_logging_interface.hpp>
@@ -119,12 +120,19 @@ public:
   /// \internal
   RCLCPP_ACTION_PUBLIC
   std::shared_ptr<void>
-  take_data() override;
+  take_data(const void * arg) override;
 
   /// \internal
   RCLCPP_ACTION_PUBLIC
   void
   execute(std::shared_ptr<void> & data) override;
+
+  /// \internal
+  RCLCPP_PUBLIC
+  void
+  set_events_executor_callback(
+    rmw_listener_callback_t executor_callback,
+    const void * executor_callback_data) override;
 
   // End Waitables API
   // -----------------
@@ -246,6 +254,8 @@ protected:
 
 private:
   std::unique_ptr<ClientBaseImpl> pimpl_;
+  std::unordered_map<const void *, rcl_action_client_entity_type_t> id_to_action_client_event_map_;
+  std::vector<rclcpp::executors::EventsExecutorCallbackData> action_client_callback_data_;
 };
 
 /// Action Client

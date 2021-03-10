@@ -236,8 +236,9 @@ public:
   bool is_ready(rcl_wait_set_t *) override {return true;}
 
   std::shared_ptr<void>
-  take_data() override
+  take_data(const void * arg) override
   {
+    (void)arg;
     return nullptr;
   }
   void
@@ -372,7 +373,7 @@ TEST_F(TestStaticExecutorEntitiesCollector, prepare_wait_set_rcl_wait_set_clear_
 
   {
     auto mock = mocking_utils::patch_and_return("lib:rclcpp", rcl_wait_set_clear, RCL_RET_ERROR);
-    std::shared_ptr<void> data = entities_collector_->take_data();
+    std::shared_ptr<void> data = entities_collector_->take_data(nullptr);
     RCLCPP_EXPECT_THROW_EQ(
       entities_collector_->execute(data),
       std::runtime_error("Couldn't clear wait set"));
@@ -403,7 +404,7 @@ TEST_F(TestStaticExecutorEntitiesCollector, prepare_wait_set_rcl_wait_set_resize
 
   {
     auto mock = mocking_utils::patch_and_return("lib:rclcpp", rcl_wait_set_resize, RCL_RET_ERROR);
-    std::shared_ptr<void> data = entities_collector_->take_data();
+    std::shared_ptr<void> data = entities_collector_->take_data(nullptr);
     RCLCPP_EXPECT_THROW_EQ(
       entities_collector_->execute(data),
       std::runtime_error("Couldn't resize the wait set: error not set"));
@@ -627,7 +628,7 @@ TEST_F(
   RCLCPP_SCOPE_EXIT(entities_collector_->fini());
 
   cb_group->get_associated_with_executor_atomic().exchange(false);
-  std::shared_ptr<void> data = entities_collector_->take_data();
+  std::shared_ptr<void> data = entities_collector_->take_data(nullptr);
   entities_collector_->execute(data);
 
   EXPECT_TRUE(entities_collector_->remove_node(node->get_node_base_interface()));

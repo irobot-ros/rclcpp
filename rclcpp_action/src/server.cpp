@@ -130,6 +130,8 @@ ServerBase::ServerBase(
 
 ServerBase::~ServerBase()
 {
+  id_to_action_server_event_map_.clear();
+  action_server_callback_data_.clear();
 }
 
 size_t
@@ -206,8 +208,42 @@ ServerBase::is_ready(rcl_wait_set_t * wait_set)
 }
 
 std::shared_ptr<void>
-ServerBase::take_data()
+ServerBase::take_data(const void * arg)
 {
+  if (arg) {
+    // Find the action server entity which is ready
+    auto it = id_to_action_server_event_map_.find(arg);
+
+    if (it != id_to_action_server_event_map_.end()) {
+      rcl_action_server_entity_type_t ready_entity = it->second;
+
+      switch (ready_entity) {
+        case GOAL_SERVICE:
+          {
+            pimpl_->goal_request_ready_.store(true);
+            break;
+          }
+
+        case CANCEL_SERVICE:
+          {
+            pimpl_->cancel_request_ready_.store(true);
+            break;
+          }
+
+        case RESULT_SERVICE:
+          {
+            pimpl_->result_request_ready_.store(true);
+            break;
+          }
+        default:
+          throw std::runtime_error("default case. Break");
+          break;
+      }
+    } else {
+      throw std::runtime_error("ServerBase: Ready entity not found");
+    }
+  }
+
   if (pimpl_->goal_request_ready_.load()) {
     rcl_ret_t ret;
     rcl_action_goal_info_t goal_info = rcl_action_get_zero_initialized_goal_info();
@@ -661,5 +697,69 @@ ServerBase::publish_feedback(std::shared_ptr<void> feedback_msg)
   rcl_ret_t ret = rcl_action_publish_feedback(pimpl_->action_server_.get(), feedback_msg.get());
   if (RCL_RET_OK != ret) {
     rclcpp::exceptions::throw_from_rcl_error(ret, "Failed to publish feedback");
+  }
+}
+
+void
+ServerBase::set_events_executor_callback(
+    rmw_listener_callback_t executor_callback,
+    const void * executor_callback_data)
+{
+  if ((executor_callback == nullptr) || (executor_callback_data == nullptr)) {
+    // Not valid arguments. Unset listeners callback data.
+    rcl_ret_t ret = rcl_action_server_set_listeners_callback(
+      pimpl_->action_server_.get(),
+      nullptr,
+      nullptr);
+
+    if (ret != RCL_RET_OK) {
+      throw std::runtime_error("ServerBase: Couldn't unset events executor callbacks.");
+    }
+
+    return;
+  }
+
+  auto data = static_cast<const rclcpp::executors::EventsExecutorCallbackData *>(executor_callback_data);
+
+  // Create an ExecutorEvent per action server event type
+  rclcpp::executors::ExecutorEvent goal_request   = {data->event.entity_id, nullptr, data->event.type};
+  rclcpp::executors::ExecutorEvent result_request = {data->event.entity_id, nullptr, data->event.type};
+  rclcpp::executors::ExecutorEvent cancel_request = {data->event.entity_id, nullptr, data->event.type};
+
+  // Get the event ID of each action server event type.
+  const void * events_id[ACTION_SERVER_NUM_ENTITIES];
+  rcl_action_server_get_events_id(pimpl_->action_server_.get(), events_id);
+
+  // Fill the ExecutorEvents entity_arg field.
+  goal_request.entity_arg = events_id[GOAL_SERVICE];
+  result_request.entity_arg = events_id[RESULT_SERVICE];
+  cancel_request.entity_arg = events_id[CANCEL_SERVICE];
+
+   // Map the events ID with the event type
+  id_to_action_server_event_map_.emplace(events_id[GOAL_SERVICE], GOAL_SERVICE);
+  id_to_action_server_event_map_.emplace(events_id[RESULT_SERVICE], RESULT_SERVICE);
+  id_to_action_server_event_map_.emplace(events_id[CANCEL_SERVICE], CANCEL_SERVICE);
+
+  // Store all action server callback data in the std::vector
+  action_server_callback_data_.reserve(ACTION_SERVER_NUM_ENTITIES);
+  action_server_callback_data_[GOAL_SERVICE] = {data->executor, goal_request};
+  action_server_callback_data_[RESULT_SERVICE] = {data->executor, result_request};
+  action_server_callback_data_[CANCEL_SERVICE] = {data->executor, cancel_request};
+
+  // Create simple array to pass the callbacks data of events to rcl
+  const void * action_server_cb_data[ACTION_SERVER_NUM_ENTITIES];
+
+  action_server_cb_data[GOAL_SERVICE] = &action_server_callback_data_[GOAL_SERVICE];
+  action_server_cb_data[RESULT_SERVICE] = &action_server_callback_data_[RESULT_SERVICE];
+  action_server_cb_data[CANCEL_SERVICE] = &action_server_callback_data_[CANCEL_SERVICE];
+
+  // Set listener callbacks to the action server entities
+  rcl_ret_t ret = rcl_action_server_set_listeners_callback(
+    pimpl_->action_server_.get(),
+    executor_callback,
+    action_server_cb_data);
+
+  if (ret != RCL_RET_OK) {
+    throw std::runtime_error("ServerBase: Couldn't set events executor callbacks.");
   }
 }

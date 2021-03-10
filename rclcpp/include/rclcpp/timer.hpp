@@ -92,8 +92,12 @@ public:
   reset();
 
   /// Call the callback function when the timer signal is emitted.
+  /**
+   * \return true if callback was executed, false otherwise
+   * \throws std::runtime_error if failed to notify timer that callback occurred
+   */
   RCLCPP_PUBLIC
-  virtual void
+  virtual bool
   execute_callback() = 0;
 
   RCLCPP_PUBLIC
@@ -193,14 +197,15 @@ public:
 
   /**
    * \sa rclcpp::TimerBase::execute_callback
+   * \return true if callback was executed, false otherwise
    * \throws std::runtime_error if it failed to notify timer that callback occurred
    */
-  void
+  bool
   execute_callback() override
   {
     rcl_ret_t ret = rcl_timer_call(timer_handle_.get());
     if (ret == RCL_RET_TIMER_CANCELED) {
-      return;
+      return false;
     }
     if (ret != RCL_RET_OK) {
       throw std::runtime_error("Failed to notify timer that callback occurred");
@@ -208,6 +213,7 @@ public:
     TRACEPOINT(callback_start, static_cast<const void *>(&callback_), false);
     execute_callback_delegate<>();
     TRACEPOINT(callback_end, static_cast<const void *>(&callback_));
+    return true;
   }
 
   // void specialization

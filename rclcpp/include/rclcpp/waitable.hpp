@@ -141,6 +141,8 @@ public:
    * This method takes the data from the underlying data structure and
    * writes it to the void shared pointer `data` that is passed into the
    * method. The `data` can then be executed with the `execute` method.
+   * The argument passed can help to identify which data to take for
+   * some waitables.
    *
    * Before calling this method, the Waitable should be added to a wait set,
    * waited on, and then updated.
@@ -158,13 +160,13 @@ public:
    * // Update the Waitable
    * waitable.update(wait_set);
    * // Execute any entities of the Waitable that may be ready
-   * std::shared_ptr<void> data = waitable.take_data();
+   * std::shared_ptr<void> data = waitable.take_data(nullptr);
    * ```
    */
   RCLCPP_PUBLIC
   virtual
   std::shared_ptr<void>
-  take_data() = 0;
+  take_data(const void * arg) = 0;
 
   /// Execute data that is passed in.
   /**
@@ -185,7 +187,7 @@ public:
    * // Update the Waitable
    * waitable.update(wait_set);
    * // Execute any entities of the Waitable that may be ready
-   * std::shared_ptr<void> data = waitable.take_data();
+   * std::shared_ptr<void> data = waitable.take_data(nullptr);
    * waitable.execute(data);
    * ```
    */
@@ -212,8 +214,8 @@ public:
   virtual
   void
   set_events_executor_callback(
-    rclcpp::executors::EventsExecutor * executor,
-    rmw_listener_callback_t executor_callback) const;
+    rmw_listener_callback_t executor_callback,
+    const void * executor_callback_data);
 
 private:
   std::atomic<bool> in_use_by_wait_set_{false};

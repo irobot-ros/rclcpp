@@ -89,8 +89,9 @@ StaticExecutorEntitiesCollector::fini()
 }
 
 std::shared_ptr<void>
-StaticExecutorEntitiesCollector::take_data()
+StaticExecutorEntitiesCollector::take_data(const void * arg)
 {
+  (void)arg;
   return nullptr;
 }
 

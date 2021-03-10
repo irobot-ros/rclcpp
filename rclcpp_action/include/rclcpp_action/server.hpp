@@ -18,6 +18,7 @@
 #include <rcl_action/action_server.h>
 #include <rosidl_runtime_c/action_type_support_struct.h>
 #include <rosidl_typesupport_cpp/action_type_support.hpp>
+#include "rclcpp/executors/events_executor_event_types.hpp"
 #include <rclcpp/node_interfaces/node_base_interface.hpp>
 #include <rclcpp/node_interfaces/node_clock_interface.hpp>
 #include <rclcpp/node_interfaces/node_logging_interface.hpp>
@@ -120,13 +121,21 @@ public:
 
   RCLCPP_ACTION_PUBLIC
   std::shared_ptr<void>
-  take_data() override;
+  take_data(const void * arg) override;
 
   /// Act on entities in the wait set which are ready to be acted upon.
   /// \internal
   RCLCPP_ACTION_PUBLIC
   void
   execute(std::shared_ptr<void> & data) override;
+
+  /// Set events executor callback
+  /// \internal
+  RCLCPP_PUBLIC
+  void
+  set_events_executor_callback(
+    rmw_listener_callback_t executor_callback,
+    const void * executor_callback_data) override;
 
   // End Waitables API
   // -----------------
@@ -256,6 +265,8 @@ private:
   /// Private implementation
   /// \internal
   std::unique_ptr<ServerBaseImpl> pimpl_;
+  std::unordered_map<const void *, rcl_action_server_entity_type_t> id_to_action_server_event_map_;
+  std::vector<rclcpp::executors::EventsExecutorCallbackData> action_server_callback_data_;
 };
 
 /// Action Server

@@ -58,7 +58,7 @@ public:
 
   virtual
   std::shared_ptr<void>
-  take_data() = 0;
+  take_data(const void * arg) = 0;
 
   virtual void
   execute(std::shared_ptr<void> & data) = 0;
@@ -77,8 +77,8 @@ public:
   RCLCPP_PUBLIC
   void
   set_events_executor_callback(
-    rclcpp::executors::EventsExecutor * executor,
-    rmw_listener_callback_t executor_callback) const override;
+    rmw_listener_callback_t executor_callback,
+    const void * executor_callback_data) override;
 
 protected:
   std::recursive_mutex reentrant_mutex_;

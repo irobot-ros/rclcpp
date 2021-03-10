@@ -122,8 +122,9 @@ public:
   }
 
   std::shared_ptr<void>
-  take_data()
+  take_data(const void * arg)
   {
+    (void)arg;
     ConstMessageSharedPtr shared_msg;
     MessageUniquePtr unique_msg;
 

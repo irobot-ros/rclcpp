@@ -80,11 +80,12 @@ public:
   /// Take the data so that it can be consumed with `execute`.
   /**
    * For `StaticExecutorEntitiesCollector`, this always return `nullptr`.
-   * \sa rclcpp::Waitable::take_data()
+   * \param arg Argument to identify data to take
+   * \sa rclcpp::Waitable::take_data(const void * arg)
    */
   RCLCPP_PUBLIC
   std::shared_ptr<void>
-  take_data() override;
+  take_data(const void * arg) override;
 
   /// Function to add_handles_to_wait_set and wait for work and
   /**

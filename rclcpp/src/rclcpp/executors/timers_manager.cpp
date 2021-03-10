@@ -139,10 +139,11 @@ bool TimersManager::execute_head_timer(
 
   if (timer_ready) {
     // Head timer is ready, execute
-    head->execute_callback();
+    bool callback_executed = head->execute_callback();
+
     timers_heap.heapify_root();
     weak_timers_heap_.store(timers_heap);
-    return true;
+    return callback_executed;
   }
 
   // Head timer was not ready yet

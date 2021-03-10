@@ -37,7 +37,7 @@ class TestWaitable : public rclcpp::Waitable
 public:
   bool add_to_wait_set(rcl_wait_set_t *) override {return true;}
   bool is_ready(rcl_wait_set_t *) override {return true;}
-  std::shared_ptr<void> take_data() override {return nullptr;}
+  std::shared_ptr<void> take_data(const void * arg) override {(void)arg; return nullptr;}
   void execute(std::shared_ptr<void> & data) override {(void)data;}
 };
 

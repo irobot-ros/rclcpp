@@ -135,6 +135,8 @@ ClientBase::ClientBase(
 
 ClientBase::~ClientBase()
 {
+  action_client_callback_data_.clear();
+  id_to_action_client_event_map_.clear();
 }
 
 bool
@@ -383,8 +385,55 @@ ClientBase::generate_goal_id()
 }
 
 std::shared_ptr<void>
-ClientBase::take_data()
+ClientBase::take_data(const void * arg)
 {
+  if (arg) {
+    // Find the action client entity which is ready
+    auto it = id_to_action_client_event_map_.find(arg);
+
+    if (it != id_to_action_client_event_map_.end()) {
+      rcl_action_client_entity_type_t ready_entity = it->second;
+
+      switch (ready_entity) {
+        case GOAL_CLIENT:
+          {
+            pimpl_->is_goal_response_ready = true;
+            break;
+          }
+
+        case RESULT_CLIENT:
+          {
+            pimpl_->is_result_response_ready = true;
+            break;
+          }
+
+        case CANCEL_CLIENT:
+          {
+            pimpl_->is_cancel_response_ready = true;
+            break;
+          }
+
+        case FEEDBACK_SUBSCRIPTION:
+          {
+            pimpl_->is_feedback_ready = true;
+            break;
+          }
+
+        case STATUS_SUBSCRIPTION:
+          {
+            pimpl_->is_status_ready = true;
+            break;
+          }
+
+        default:
+          throw std::runtime_error("default case. Break");
+          break;
+      }
+    } else {
+      throw std::runtime_error("ClientBase: Ready entity not found");
+    }
+  }
+
   if (pimpl_->is_feedback_ready) {
     std::shared_ptr<void> feedback_message = this->create_feedback_message();
     rcl_ret_t ret = rcl_action_take_feedback(
@@ -496,4 +545,77 @@ ClientBase::execute(std::shared_ptr<void> & data)
   }
 }
 
+void
+ClientBase::set_events_executor_callback(
+  rmw_listener_callback_t executor_callback,
+  const void * executor_callback_data)
+{
+  if ((executor_callback == nullptr) || (executor_callback_data == nullptr)) {
+    // Not valid arguments. Unset listeners callback data.
+    rcl_ret_t ret = rcl_action_client_set_listeners_callback(
+      pimpl_->client_handle.get(),
+      nullptr,
+      nullptr);
+
+    if (ret != RCL_RET_OK) {
+      throw std::runtime_error("ClientBase: Couldn't unset events executor callbacks.");
+    }
+
+    return;
+  }
+
+  auto data = static_cast<const rclcpp::executors::EventsExecutorCallbackData *>(executor_callback_data);
+
+  // Create an ExecutorEvent per action client event type
+  rclcpp::executors::ExecutorEvent goal_response   = {data->event.entity_id, nullptr, data->event.type};
+  rclcpp::executors::ExecutorEvent cancel_response = {data->event.entity_id, nullptr, data->event.type};
+  rclcpp::executors::ExecutorEvent result_response = {data->event.entity_id, nullptr, data->event.type};
+  rclcpp::executors::ExecutorEvent feedback_ready = {data->event.entity_id, nullptr, data->event.type};
+  rclcpp::executors::ExecutorEvent status_ready = {data->event.entity_id, nullptr, data->event.type};
+
+  // Get the event ID of each action client event type.
+  const void * events_id[ACTION_CLIENT_NUM_ENTITIES];
+  rcl_action_client_get_events_id(pimpl_->client_handle.get(), events_id);
+
+  // Fill the ExecutorEvents entity_arg field.
+  goal_response.entity_arg = events_id[GOAL_CLIENT];
+  cancel_response.entity_arg = events_id[CANCEL_CLIENT];
+  result_response.entity_arg = events_id[RESULT_CLIENT];
+  feedback_ready.entity_arg = events_id[FEEDBACK_SUBSCRIPTION];
+  status_ready.entity_arg = events_id[STATUS_SUBSCRIPTION];
+
+  // Map the events ID with the event type
+  id_to_action_client_event_map_.emplace(events_id[GOAL_CLIENT], GOAL_CLIENT);
+  id_to_action_client_event_map_.emplace(events_id[CANCEL_CLIENT], CANCEL_CLIENT);
+  id_to_action_client_event_map_.emplace(events_id[RESULT_CLIENT], RESULT_CLIENT);
+  id_to_action_client_event_map_.emplace(events_id[FEEDBACK_SUBSCRIPTION], FEEDBACK_SUBSCRIPTION);
+  id_to_action_client_event_map_.emplace(events_id[STATUS_SUBSCRIPTION], STATUS_SUBSCRIPTION);
+
+  // Store all action clients callback data in the std::vector
+  action_client_callback_data_.reserve(ACTION_CLIENT_NUM_ENTITIES);
+  action_client_callback_data_[GOAL_CLIENT] = {data->executor, goal_response};
+  action_client_callback_data_[RESULT_CLIENT] = {data->executor, result_response};
+  action_client_callback_data_[CANCEL_CLIENT] = {data->executor, cancel_response};
+  action_client_callback_data_[FEEDBACK_SUBSCRIPTION] = {data->executor, feedback_ready};
+  action_client_callback_data_[STATUS_SUBSCRIPTION] = {data->executor, status_ready};
+
+  // Create simple array to pass the callback data of events to rcl
+  const void * action_client_cb_data[ACTION_CLIENT_NUM_ENTITIES];
+
+  action_client_cb_data[GOAL_CLIENT] = &action_client_callback_data_[GOAL_CLIENT];
+  action_client_cb_data[RESULT_CLIENT] = &action_client_callback_data_[RESULT_CLIENT];
+  action_client_cb_data[CANCEL_CLIENT] = &action_client_callback_data_[CANCEL_CLIENT];
+  action_client_cb_data[FEEDBACK_SUBSCRIPTION] = &action_client_callback_data_[FEEDBACK_SUBSCRIPTION];
+  action_client_cb_data[STATUS_SUBSCRIPTION] = &action_client_callback_data_[STATUS_SUBSCRIPTION];
+
+  // Set listener callbacks to the action client entities
+  rcl_ret_t ret = rcl_action_client_set_listeners_callback(
+    pimpl_->client_handle.get(),
+    executor_callback,
+    action_client_cb_data);
+
+  if (ret != RCL_RET_OK) {
+    throw std::runtime_error("ClientBase: Couldn't set events executor callbacks.");
+  }
+}
 }  // namespace rclcpp_action

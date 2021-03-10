@@ -50,8 +50,9 @@ public:
   }
 
   std::shared_ptr<void>
-  take_data() override
+  take_data(const void * arg) override
   {
+    (void)arg;
     return nullptr;
   }
 
