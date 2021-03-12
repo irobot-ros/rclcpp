@@ -16,6 +16,7 @@
 
 #include <chrono>
 #include <memory>
+#include <string>
 
 #include "rclcpp/executors/events_executor.hpp"
 
@@ -371,4 +372,78 @@ TEST_F(TestEventsExecutor, destroy_entities)
 
   executor_pub.cancel();
   spinner.join();
+}
+
+/*
+   Testing construction of a subscriptions with QoS event callback functions.
+ */
+std::string * g_pub_log_msg;
+std::string * g_sub_log_msg;
+std::promise<void> * g_log_msgs_promise;
+TEST_F(TestEventsExecutor, test_default_incompatible_qos_callbacks)
+{
+  auto node = std::make_shared<rclcpp::Node>("node");
+  rcutils_logging_output_handler_t original_output_handler = rcutils_logging_get_output_handler();
+
+  std::string pub_log_msg;
+  std::string sub_log_msg;
+  std::promise<void> log_msgs_promise;
+  g_pub_log_msg = &pub_log_msg;
+  g_sub_log_msg = &sub_log_msg;
+  g_log_msgs_promise = &log_msgs_promise;
+  auto logger_callback = [](
+    const rcutils_log_location_t * /*location*/,
+    int /*level*/, const char * /*name*/, rcutils_time_point_value_t /*timestamp*/,
+    const char * format, va_list * args) -> void {
+      char buffer[1024];
+      vsnprintf(buffer, sizeof(buffer), format, *args);
+      const std::string msg = buffer;
+      if (msg.rfind("New subscription discovered on topic '/test_topic'", 0) == 0) {
+        *g_pub_log_msg = buffer;
+      } else if (msg.rfind("New publisher discovered on topic '/test_topic'", 0) == 0) {
+        *g_sub_log_msg = buffer;
+      }
+
+      if (!g_pub_log_msg->empty() && !g_sub_log_msg->empty()) {
+        g_log_msgs_promise->set_value();
+      }
+    };
+  rcutils_logging_set_output_handler(logger_callback);
+
+  std::shared_future<void> log_msgs_future = log_msgs_promise.get_future();
+
+  rclcpp::QoS qos_profile_publisher(10);
+  qos_profile_publisher.durability(RMW_QOS_POLICY_DURABILITY_VOLATILE);
+  auto publisher = node->create_publisher<test_msgs::msg::Empty>(
+    "test_topic", qos_profile_publisher);
+
+  rclcpp::QoS qos_profile_subscription(10);
+  qos_profile_subscription.durability(RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL);
+  auto subscription = node->create_subscription<test_msgs::msg::Empty>(
+    "test_topic", qos_profile_subscription, [&](test_msgs::msg::Empty::SharedPtr) {});
+
+  rclcpp::executors::EventsExecutor ex;
+  ex.add_node(node->get_node_base_interface());
+
+  // This future won't complete on fastrtps, so just timeout immediately
+  bool is_fastrtps =
+    std::string(rmw_get_implementation_identifier()).find("rmw_fastrtps") != std::string::npos;
+  const auto timeout = (is_fastrtps) ? std::chrono::milliseconds(5) : std::chrono::seconds(10);
+  ex.spin_until_future_complete(log_msgs_future, timeout);
+
+  if (is_fastrtps) {
+    EXPECT_EQ("", pub_log_msg);
+    EXPECT_EQ("", sub_log_msg);
+  } else {
+    EXPECT_EQ(
+      "New subscription discovered on topic '/test_topic', requesting incompatible QoS. "
+      "No messages will be sent to it. Last incompatible policy: DURABILITY_QOS_POLICY",
+      pub_log_msg);
+    EXPECT_EQ(
+      "New publisher discovered on topic '/test_topic', offering incompatible QoS. "
+      "No messages will be sent to it. Last incompatible policy: DURABILITY_QOS_POLICY",
+      sub_log_msg);
+  }
+
+  rcutils_logging_set_output_handler(original_output_handler);
 }

@@ -77,7 +77,7 @@ QOSEventHandlerBase::set_listener_callback(
     &event_handle_,
     callback,
     user_data,
-    false /* Discard previous events */);
+    true /* Use previous events */);
 
   if (RCL_RET_OK != ret) {
     throw std::runtime_error("Couldn't set listener callback to QOSEventHandlerBase");

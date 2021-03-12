@@ -54,7 +54,7 @@ struct EventsExecutorCallbackData
   // Equal operator
   bool operator==(const EventsExecutorCallbackData & other) const
   {
-    return (event.entity_id == other.event.entity_id);
+    return event.entity_id == other.event.entity_id;
   }
 
   // Struct members

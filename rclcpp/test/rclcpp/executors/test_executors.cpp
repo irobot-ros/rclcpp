@@ -129,7 +129,7 @@ TYPED_TEST_SUITE(TestExecutors, ExecutorTypes, ExecutorTypeNames);
 using StandardExecutors =
   ::testing::Types<
   rclcpp::executors::EventsExecutor,
-  rclcpp::executors::MultiThreadedExecutor>;
+  rclcpp::executors::MultiThreadedExecutor,
   rclcpp::executors::SingleThreadedExecutor>;
 TYPED_TEST_CASE(TestExecutorsStable, StandardExecutors, ExecutorTypeNames);
 
