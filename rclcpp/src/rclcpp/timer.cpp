@@ -116,8 +116,16 @@ TimerBase::is_ready()
 std::chrono::nanoseconds
 TimerBase::time_until_trigger()
 {
+  bool is_canceled = false;
+  rcl_ret_t ret = rcl_timer_is_canceled(timer_handle_.get(), &is_canceled);
+  if (ret != RCL_RET_OK) {
+    rclcpp::exceptions::throw_from_rcl_error(ret, "Couldn't get timer cancelled state");
+  }
+  if (is_canceled) {
+    return std::chrono::nanoseconds::max();
+  }
   int64_t time_until_next_call = 0;
-  rcl_ret_t ret = rcl_timer_get_time_until_next_call(
+  ret = rcl_timer_get_time_until_next_call(
     timer_handle_.get(), &time_until_next_call);
   if (ret != RCL_RET_OK) {
     rclcpp::exceptions::throw_from_rcl_error(ret, "Timer could not get time until next call");

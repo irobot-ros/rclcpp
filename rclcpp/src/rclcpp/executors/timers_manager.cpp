@@ -159,7 +159,12 @@ std::chrono::nanoseconds TimersManager::get_head_timeout_unsafe()
   TimerPtr head_timer = weak_timers_heap_.front().lock();
   // If it is still a valid pointer, it is guaranteed to be the correct head
   if (head_timer != nullptr) {
-    return head_timer->time_until_trigger();
+    auto time_until_trigger = head_timer->time_until_trigger();
+    // A canceled timer will return a nanoseconds::max duration
+    if (time_until_trigger == std::chrono::nanoseconds::max()) {
+      return MAX_TIME;
+    }
+    return time_until_trigger;
   }
 
   // If the first elements has expired, we can't make other assumptions on the heap
@@ -172,7 +177,12 @@ std::chrono::nanoseconds TimersManager::get_head_timeout_unsafe()
   if (locked_heap.empty()) {
     return MAX_TIME;
   }
-  return locked_heap.front()->time_until_trigger();
+  auto time_until_trigger = locked_heap.front()->time_until_trigger();
+  // A canceled timer will return a nanoseconds::max duration
+  if (time_until_trigger == std::chrono::nanoseconds::max()) {
+    return MAX_TIME;
+  }
+  return time_until_trigger;
 }
 
 void TimersManager::execute_ready_timers_unsafe()
