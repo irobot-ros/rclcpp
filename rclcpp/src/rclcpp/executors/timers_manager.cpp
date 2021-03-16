@@ -154,30 +154,25 @@ std::chrono::nanoseconds TimersManager::get_head_timeout_unsafe()
   if (weak_timers_heap_.empty()) {
     return MAX_TIME;
   }
-
-  // Weak heap is not empty, so try to lock the first element
-  TimerPtr head_timer = weak_timers_heap_.front().lock();
+  // Weak heap is not empty, so try to lock the first element.
   // If it is still a valid pointer, it is guaranteed to be the correct head
-  if (head_timer != nullptr) {
-    auto time_until_trigger = head_timer->time_until_trigger();
-    // A canceled timer will return a nanoseconds::max duration
-    if (time_until_trigger == std::chrono::nanoseconds::max()) {
+  TimerPtr head_timer = weak_timers_heap_.front().lock();
+
+  if (head_timer == nullptr) {
+    // The first element has expired, we can't make other assumptions on the heap
+    // and we need to entirely validate it.
+    TimersHeap locked_heap = weak_timers_heap_.validate_and_lock();
+    // NOTE: the following operations will not modify any element in the heap, so we
+    // don't have to call `weak_timers_heap_.store(locked_heap)` at the end.
+
+    if (locked_heap.empty()) {
       return MAX_TIME;
     }
-    return time_until_trigger;
+    head_timer = locked_heap.front();
   }
 
-  // If the first elements has expired, we can't make other assumptions on the heap
-  // and we need to entirely validate it.
-  TimersHeap locked_heap = weak_timers_heap_.validate_and_lock();
+  auto time_until_trigger = head_timer->time_until_trigger();
 
-  // NOTE: the following operations will not modify any element in the heap, so we
-  // don't have to call `weak_timers_heap_.store(locked_heap)` at the end.
-
-  if (locked_heap.empty()) {
-    return MAX_TIME;
-  }
-  auto time_until_trigger = locked_heap.front()->time_until_trigger();
   // A canceled timer will return a nanoseconds::max duration
   if (time_until_trigger == std::chrono::nanoseconds::max()) {
     return MAX_TIME;
