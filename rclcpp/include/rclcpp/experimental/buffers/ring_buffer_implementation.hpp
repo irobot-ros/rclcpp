@@ -101,7 +101,14 @@ public:
     return size_ == capacity_;
   }
 
-  void clear() {}
+  void clear()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    ring_buffer_ = std::vector<BufferT>(capacity_);
+    write_index_ = capacity_ - 1;
+    read_index_ = 0;
+    size_ = 0;
+  }
 
 private:
   size_t capacity_;

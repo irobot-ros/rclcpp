@@ -118,20 +118,43 @@ public:
   provide_intra_process_message(ConstMessageSharedPtr message)
   {
     buffer_->add_shared(std::move(message));
-    trigger_guard_condition();
+    std::lock_guard<std::mutex> lock(executor_callback_mutex_);
+    if (executor_callback_) {
+      executor_callback_(executor_, {this, WAITABLE_EVENT});
+    } else {
+      trigger_guard_condition();
+    }
   }
 
   void
   provide_intra_process_message(MessageUniquePtr message)
   {
     buffer_->add_unique(std::move(message));
-    trigger_guard_condition();
+
+    std::lock_guard<std::mutex> lock(executor_callback_mutex_);
+    if (executor_callback_) {
+      executor_callback_(executor_, {this, WAITABLE_EVENT});
+    } else {
+      trigger_guard_condition();
+    }
   }
 
   bool
   use_take_shared_method() const
   {
     return buffer_->use_take_shared_method();
+  }
+
+  void
+  set_events_executor_callback(
+    const rclcpp::executors::EventsExecutor * executor,
+    rmw_listener_cb_t executor_callback) override
+  {
+    std::lock_guard<std::mutex> lock(executor_callback_mutex_);
+    executor_ = executor;
+    executor_callback_ = executor_callback;
+    // Buffer must be cleared under the executor callback lock to make sure that other threads wait for this
+    buffer_->clear();
   }
 
 private:
