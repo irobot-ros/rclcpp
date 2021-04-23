@@ -115,7 +115,6 @@ public:
    *
    * \param[in] callback functor to be called when a new message is received.
    */
-  RCLCPP_PUBLIC
   void
   set_on_ready_callback(std::function<void(size_t, int)> callback) override
   {
