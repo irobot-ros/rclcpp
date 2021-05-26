@@ -31,8 +31,6 @@
 #include "rcutils/error_handling.h"
 #include "rcutils/macros.h"
 
-#include "rmw/impl/cpp/demangle.hpp"
-
 #include "./logging_mutex.hpp"
 
 using rclcpp::Context;
@@ -291,7 +289,7 @@ Context::get_domain_id() const
 }
 
 std::string
-Context::shutdown_reason()
+Context::shutdown_reason() const
 {
   std::lock_guard<std::recursive_mutex> lock(init_mutex_);
   return shutdown_reason_;
@@ -315,9 +313,13 @@ Context::shutdown(const std::string & reason)
   // set shutdown reason
   shutdown_reason_ = reason;
   // call each shutdown callback
-  for (const auto & callback : on_shutdown_callbacks_) {
-    callback();
+  {
+    std::lock_guard<std::mutex> lock(on_shutdown_callbacks_mutex_);
+    for (const auto & callback : on_shutdown_callbacks_) {
+      (*callback)();
+    }
   }
+
   // interrupt all blocking sleep_for() and all blocking executors or wait sets
   this->interrupt_all_sleep_for();
   // remove self from the global contexts
@@ -344,20 +346,48 @@ Context::shutdown(const std::string & reason)
 rclcpp::Context::OnShutdownCallback
 Context::on_shutdown(OnShutdownCallback callback)
 {
-  on_shutdown_callbacks_.push_back(callback);
+  add_on_shutdown_callback(callback);
   return callback;
 }
 
-const std::vector<rclcpp::Context::OnShutdownCallback> &
-Context::get_on_shutdown_callbacks() const
+rclcpp::OnShutdownCallbackHandle
+Context::add_on_shutdown_callback(OnShutdownCallback callback)
 {
-  return on_shutdown_callbacks_;
+  auto callback_shared_ptr = std::make_shared<OnShutdownCallback>(callback);
+  {
+    std::lock_guard<std::mutex> lock(on_shutdown_callbacks_mutex_);
+    on_shutdown_callbacks_.emplace(callback_shared_ptr);
+  }
+
+  OnShutdownCallbackHandle callback_handle;
+  callback_handle.callback = callback_shared_ptr;
+  return callback_handle;
 }
 
-std::vector<rclcpp::Context::OnShutdownCallback> &
-Context::get_on_shutdown_callbacks()
+bool
+Context::remove_on_shutdown_callback(const OnShutdownCallbackHandle & callback_handle)
 {
-  return on_shutdown_callbacks_;
+  std::lock_guard<std::mutex> lock(on_shutdown_callbacks_mutex_);
+  auto callback_shared_ptr = callback_handle.callback.lock();
+  if (callback_shared_ptr == nullptr) {
+    return false;
+  }
+  return on_shutdown_callbacks_.erase(callback_shared_ptr) == 1;
+}
+
+std::vector<rclcpp::Context::OnShutdownCallback>
+Context::get_on_shutdown_callbacks() const
+{
+  std::vector<OnShutdownCallback> callbacks;
+
+  {
+    std::lock_guard<std::mutex> lock(on_shutdown_callbacks_mutex_);
+    for (auto & iter : on_shutdown_callbacks_) {
+      callbacks.emplace_back(*iter);
+    }
+  }
+
+  return callbacks;
 }
 
 std::shared_ptr<rcl_context_t>

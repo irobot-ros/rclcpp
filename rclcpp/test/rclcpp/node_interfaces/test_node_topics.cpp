@@ -71,6 +71,8 @@ public:
 
   void handle_message(std::shared_ptr<void> &, const rclcpp::MessageInfo &) override {}
   void handle_loaned_message(void *, const rclcpp::MessageInfo &) override {}
+  void handle_serialized_message(
+    const std::shared_ptr<rclcpp::SerializedMessage> &, const rclcpp::MessageInfo &) override {}
   void return_message(std::shared_ptr<void> &) override {}
   void return_serialized_message(std::shared_ptr<rclcpp::SerializedMessage> &) override {}
 };
@@ -127,7 +129,7 @@ TEST_F(TestNodeTopics, add_publisher_rcl_trigger_guard_condition_error)
     "lib:rclcpp", rcl_trigger_guard_condition, RCL_RET_ERROR);
   RCLCPP_EXPECT_THROW_EQ(
     node_topics->add_publisher(publisher, callback_group),
-    std::runtime_error("Failed to notify wait set on publisher creation: error not set"));
+    std::runtime_error("error not set"));
 }
 
 TEST_F(TestNodeTopics, add_subscription)
@@ -155,7 +157,7 @@ TEST_F(TestNodeTopics, add_subscription_rcl_trigger_guard_condition_error)
     "lib:rclcpp", rcl_trigger_guard_condition, RCL_RET_ERROR);
   RCLCPP_EXPECT_THROW_EQ(
     node_topics->add_subscription(subscription, callback_group),
-    std::runtime_error("failed to notify wait set on subscription creation: error not set"));
+    std::runtime_error("error not set"));
 }
 
 TEST_F(TestNodeTopics, resolve_topic_name)

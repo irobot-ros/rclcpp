@@ -22,6 +22,7 @@
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "rcutils/logging_macros.h"
@@ -34,6 +35,7 @@
 #include "rclcpp/experimental/intra_process_manager.hpp"
 #include "rclcpp/logging.hpp"
 #include "rclcpp/macros.hpp"
+#include "rclcpp/network_flow_endpoint.hpp"
 #include "rclcpp/node.hpp"
 #include "rclcpp/qos_event.hpp"
 
@@ -153,7 +155,8 @@ PublisherBase::get_publisher_handle() const
   return publisher_handle_;
 }
 
-const std::vector<std::shared_ptr<rclcpp::QOSEventHandlerBase>> &
+const
+std::unordered_map<rcl_publisher_event_type_t, std::shared_ptr<rclcpp::QOSEventHandlerBase>> &
 PublisherBase::get_event_handlers() const
 {
   return event_handlers_;
@@ -267,4 +270,40 @@ PublisherBase::default_incompatible_qos_callback(
     "Last incompatible policy: %s",
     get_topic_name(),
     policy_name.c_str());
+}
+
+std::vector<rclcpp::NetworkFlowEndpoint> PublisherBase::get_network_flow_endpoints() const
+{
+  rcutils_allocator_t allocator = rcutils_get_default_allocator();
+  rcl_network_flow_endpoint_array_t network_flow_endpoint_array =
+    rcl_get_zero_initialized_network_flow_endpoint_array();
+  rcl_ret_t ret = rcl_publisher_get_network_flow_endpoints(
+    publisher_handle_.get(), &allocator, &network_flow_endpoint_array);
+  if (RCL_RET_OK != ret) {
+    auto error_msg = std::string("error obtaining network flows of publisher: ") +
+      rcl_get_error_string().str;
+    rcl_reset_error();
+    if (RCL_RET_OK !=
+      rcl_network_flow_endpoint_array_fini(&network_flow_endpoint_array))
+    {
+      error_msg += std::string(", also error cleaning up network flow array: ") +
+        rcl_get_error_string().str;
+      rcl_reset_error();
+    }
+    rclcpp::exceptions::throw_from_rcl_error(ret, error_msg);
+  }
+
+  std::vector<rclcpp::NetworkFlowEndpoint> network_flow_endpoint_vector;
+  for (size_t i = 0; i < network_flow_endpoint_array.size; ++i) {
+    network_flow_endpoint_vector.push_back(
+      rclcpp::NetworkFlowEndpoint(
+        network_flow_endpoint_array.network_flow_endpoint[i]));
+  }
+
+  ret = rcl_network_flow_endpoint_array_fini(&network_flow_endpoint_array);
+  if (RCL_RET_OK != ret) {
+    rclcpp::exceptions::throw_from_rcl_error(ret, "error cleaning up network flow array");
+  }
+
+  return network_flow_endpoint_vector;
 }

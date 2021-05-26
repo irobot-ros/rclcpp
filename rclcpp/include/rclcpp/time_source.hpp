@@ -25,6 +25,7 @@
 #include "rcl_interfaces/msg/parameter_event.hpp"
 
 #include "rclcpp/node.hpp"
+#include "rclcpp/executors.hpp"
 #include "rclcpp/node_interfaces/node_parameters_interface.hpp"
 
 
@@ -57,7 +58,10 @@ public:
    * \param qos QoS that will be used when creating a `/clock` subscription.
    */
   RCLCPP_PUBLIC
-  explicit TimeSource(rclcpp::Node::SharedPtr node, const rclcpp::QoS & qos = rclcpp::ClockQoS());
+  explicit TimeSource(
+    rclcpp::Node::SharedPtr node,
+    const rclcpp::QoS & qos = rclcpp::ClockQoS(),
+    bool use_clock_thread = true);
 
   /// Empty constructor
   /**
@@ -66,7 +70,9 @@ public:
    * \param qos QoS that will be used when creating a `/clock` subscription.
    */
   RCLCPP_PUBLIC
-  explicit TimeSource(const rclcpp::QoS & qos = rclcpp::ClockQoS());
+  explicit TimeSource(
+    const rclcpp::QoS & qos = rclcpp::ClockQoS(),
+    bool use_clock_thread = true);
 
   /// Attack node to the time source.
   /**
@@ -118,6 +124,11 @@ public:
   RCLCPP_PUBLIC
   ~TimeSource();
 
+protected:
+  // Dedicated thread for clock subscription.
+  bool use_clock_thread_;
+  std::thread clock_executor_thread_;
+
 private:
   // Preserve the node reference
   rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base_;
@@ -140,9 +151,12 @@ private:
   using SubscriptionT = rclcpp::Subscription<MessageT, Alloc>;
   std::shared_ptr<SubscriptionT> clock_subscription_{nullptr};
   std::mutex clock_sub_lock_;
+  rclcpp::CallbackGroup::SharedPtr clock_callback_group_;
+  rclcpp::executors::SingleThreadedExecutor::SharedPtr clock_executor_;
+  std::promise<void> cancel_clock_executor_promise_;
 
   // The clock callback itself
-  void clock_cb(const rosgraph_msgs::msg::Clock::SharedPtr msg);
+  void clock_cb(std::shared_ptr<const rosgraph_msgs::msg::Clock> msg);
 
   // Create the subscription for the clock topic
   void create_clock_sub();
@@ -156,7 +170,7 @@ private:
   std::shared_ptr<ParamSubscriptionT> parameter_subscription_;
 
   // Callback for parameter updates
-  void on_parameter_event(const rcl_interfaces::msg::ParameterEvent::SharedPtr event);
+  void on_parameter_event(std::shared_ptr<const rcl_interfaces::msg::ParameterEvent> event);
 
   // An enum to hold the parameter state
   enum UseSimTimeParameterState {UNSET, SET_TRUE, SET_FALSE};
@@ -177,7 +191,7 @@ private:
   // This is needed when new clocks are added.
   bool ros_time_active_{false};
   // Last set message to be passed to newly registered clocks
-  rosgraph_msgs::msg::Clock::SharedPtr last_msg_set_;
+  std::shared_ptr<const rosgraph_msgs::msg::Clock> last_msg_set_;
 
   // A lock to protect iterating the associated_clocks_ field.
   std::mutex clock_list_lock_;

@@ -24,6 +24,7 @@
 
 #include "rclcpp/callback_group.hpp"
 #include "rclcpp/context.hpp"
+#include "rclcpp/guard_condition.hpp"
 #include "rclcpp/macros.hpp"
 #include "rclcpp/visibility_control.hpp"
 
@@ -142,8 +143,19 @@ public:
    */
   RCLCPP_PUBLIC
   virtual
-  rcl_guard_condition_t *
+  const rcl_guard_condition_t *
   get_notify_guard_condition() = 0;
+
+  /// Return guard condition that should be notified when the internal node state changes.
+  /**
+   * For example, this should be notified when a publisher is added or removed.
+   *
+   * \return the GuardCondition if it is valid, else nullptr
+   */
+  RCLCPP_PUBLIC
+  virtual
+  rclcpp::GuardCondition *
+  get_notify_rclcpp_guard_condition() = 0;
 
   /// Acquire and return a scoped lock that protects the notify guard condition.
   /** This should be used when triggering the notify guard condition. */
@@ -170,6 +182,12 @@ public:
   std::string
   resolve_topic_or_service_name(
     const std::string & name, bool is_service, bool only_expand = false) const = 0;
+
+  /// Trigger the node's notify guard condition.
+  RCLCPP_PUBLIC
+  virtual
+  void
+  trigger_notify_guard_condition() = 0;
 };
 
 }  // namespace node_interfaces

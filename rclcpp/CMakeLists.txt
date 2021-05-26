@@ -5,6 +5,7 @@ project(rclcpp)
 find_package(Threads REQUIRED)
 
 find_package(ament_cmake_ros REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 find_package(libstatistics_collector REQUIRED)
 find_package(rcl REQUIRED)
@@ -20,9 +21,10 @@ find_package(rosidl_typesupport_cpp REQUIRED)
 find_package(statistics_msgs REQUIRED)
 find_package(tracetools REQUIRED)
 
-# Default to C++14
+# TODO(wjwwood): remove this when gtest can build on its own, when using target_compile_features()
+# Default to C++17
 if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 14)
+  set(CMAKE_CXX_STANDARD 17)
 endif()
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   # About -Wno-sign-conversion: With Clang, -Wconversion implies -Wsign-conversion. There are a number of
@@ -40,6 +42,7 @@ set(${PROJECT_NAME}_SRCS
   src/rclcpp/context.cpp
   src/rclcpp/contexts/default_context.cpp
   src/rclcpp/detail/mutex_two_priorities.cpp
+  src/rclcpp/detail/resolve_parameter_overrides.cpp
   src/rclcpp/detail/rmw_implementation_specific_payload.cpp
   src/rclcpp/detail/rmw_implementation_specific_publisher_payload.cpp
   src/rclcpp/detail/rmw_implementation_specific_subscription_payload.cpp
@@ -50,7 +53,6 @@ set(${PROJECT_NAME}_SRCS
   src/rclcpp/executable_list.cpp
   src/rclcpp/executor.cpp
   src/rclcpp/executors.cpp
-  src/rclcpp/expand_topic_or_service_name.cpp
   src/rclcpp/executors/events_executor.cpp
   src/rclcpp/executors/events_executor_entities_collector.cpp
   src/rclcpp/executors/multi_threaded_executor.cpp
@@ -58,7 +60,10 @@ set(${PROJECT_NAME}_SRCS
   src/rclcpp/executors/static_executor_entities_collector.cpp
   src/rclcpp/executors/static_single_threaded_executor.cpp
   src/rclcpp/executors/timers_manager.cpp
+  src/rclcpp/expand_topic_or_service_name.cpp
   src/rclcpp/future_return_code.cpp
+  src/rclcpp/generic_publisher.cpp
+  src/rclcpp/generic_subscription.cpp
   src/rclcpp/graph_listener.cpp
   src/rclcpp/guard_condition.cpp
   src/rclcpp/init_options.cpp
@@ -68,8 +73,8 @@ set(${PROJECT_NAME}_SRCS
   src/rclcpp/memory_strategies.cpp
   src/rclcpp/memory_strategy.cpp
   src/rclcpp/message_info.cpp
+  src/rclcpp/network_flow_endpoint.cpp
   src/rclcpp/node.cpp
-  src/rclcpp/node_options.cpp
   src/rclcpp/node_interfaces/node_base.cpp
   src/rclcpp/node_interfaces/node_clock.cpp
   src/rclcpp/node_interfaces/node_graph.cpp
@@ -80,13 +85,14 @@ set(${PROJECT_NAME}_SRCS
   src/rclcpp/node_interfaces/node_timers.cpp
   src/rclcpp/node_interfaces/node_topics.cpp
   src/rclcpp/node_interfaces/node_waitables.cpp
+  src/rclcpp/node_options.cpp
   src/rclcpp/parameter.cpp
-  src/rclcpp/parameter_value.cpp
   src/rclcpp/parameter_client.cpp
   src/rclcpp/parameter_event_handler.cpp
   src/rclcpp/parameter_events_filter.cpp
   src/rclcpp/parameter_map.cpp
   src/rclcpp/parameter_service.cpp
+  src/rclcpp/parameter_value.cpp
   src/rclcpp/publisher_base.cpp
   src/rclcpp/qos.cpp
   src/rclcpp/qos_event.cpp
@@ -101,6 +107,7 @@ set(${PROJECT_NAME}_SRCS
   src/rclcpp/time_source.cpp
   src/rclcpp/timer.cpp
   src/rclcpp/type_support.cpp
+  src/rclcpp/typesupport_helpers.cpp
   src/rclcpp/utilities.cpp
   src/rclcpp/wait_set_policies/detail/write_preferring_read_write_lock.cpp
   src/rclcpp/waitable.cpp
@@ -172,8 +179,12 @@ foreach(interface_file ${interface_files})
     include/rclcpp/node_interfaces/get_${interface_name}.hpp)
 endforeach()
 
-add_library(${PROJECT_NAME}
-  ${${PROJECT_NAME}_SRCS})
+add_library(${PROJECT_NAME} ${${PROJECT_NAME}_SRCS})
+target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
+# TODO(wjwwood): address all deprecation warnings and then remove this
+if(WIN32)
+  target_compile_definitions(${PROJECT_NAME} PUBLIC "_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS")
+endif()
 target_include_directories(${PROJECT_NAME} PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>"
@@ -181,6 +192,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 target_link_libraries(${PROJECT_NAME} ${CMAKE_THREAD_LIBS_INIT})
 # specific order: dependents before dependencies
 ament_target_dependencies(${PROJECT_NAME}
+  "ament_index_cpp"
   "libstatistics_collector"
   "rcl"
   "rcl_yaml_param_parser"
@@ -211,6 +223,7 @@ ament_export_include_directories(include)
 ament_export_libraries(${PROJECT_NAME})
 ament_export_targets(${PROJECT_NAME})
 
+ament_export_dependencies(ament_index_cpp)
 ament_export_dependencies(libstatistics_collector)
 ament_export_dependencies(rcl)
 ament_export_dependencies(rcpputils)
@@ -237,3 +250,8 @@ install(
   DIRECTORY include/ ${CMAKE_CURRENT_BINARY_DIR}/include/
   DESTINATION include
 )
+
+if(TEST cppcheck)
+  # must set the property after ament_package()
+  set_tests_properties(cppcheck PROPERTIES TIMEOUT 500)
+endif()

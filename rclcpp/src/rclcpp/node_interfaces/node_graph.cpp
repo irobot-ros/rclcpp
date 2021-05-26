@@ -348,13 +348,7 @@ NodeGraph::notify_graph_change()
     }
   }
   graph_cv_.notify_all();
-  {
-    auto notify_condition_lock = node_base_->acquire_notify_guard_condition_lock();
-    rcl_ret_t ret = rcl_trigger_guard_condition(node_base_->get_notify_guard_condition());
-    if (RCL_RET_OK != ret) {
-      throw_from_rcl_error(ret, "failed to trigger notify guard condition");
-    }
-  }
+  node_base_->trigger_notify_guard_condition();
 }
 
 void

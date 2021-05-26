@@ -57,6 +57,8 @@
 #include "rclcpp/clock.hpp"
 #include "rclcpp/context.hpp"
 #include "rclcpp/event.hpp"
+#include "rclcpp/generic_publisher.hpp"
+#include "rclcpp/generic_subscription.hpp"
 #include "rclcpp/logger.hpp"
 #include "rclcpp/macros.hpp"
 #include "rclcpp/message_memory_strategy.hpp"
@@ -127,23 +129,27 @@ public:
   /**
    * \param[in] node_name Name of the node.
    * \param[in] options Additional options to control creation of the node.
+   * \param[in] enable_communication_interface Deciding whether the communication interface of the underlying rcl_lifecycle_node shall be enabled.
    */
   RCLCPP_LIFECYCLE_PUBLIC
   explicit LifecycleNode(
     const std::string & node_name,
-    const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
+    const rclcpp::NodeOptions & options = rclcpp::NodeOptions(),
+    bool enable_communication_interface = true);
 
   /// Create a node based on the node name and a rclcpp::Context.
   /**
    * \param[in] node_name Name of the node.
    * \param[in] namespace_ Namespace of the node.
    * \param[in] options Additional options to control creation of the node.
+   * \param[in] enable_communication_interface Deciding whether the communication interface of the underlying rcl_lifecycle_node shall be enabled.
    */
   RCLCPP_LIFECYCLE_PUBLIC
   LifecycleNode(
     const std::string & node_name,
     const std::string & namespace_,
-    const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
+    const rclcpp::NodeOptions & options = rclcpp::NodeOptions(),
+    bool enable_communication_interface = true);
 
   RCLCPP_LIFECYCLE_PUBLIC
   virtual ~LifecycleNode();
@@ -175,11 +181,16 @@ public:
   /// Create and return a callback group.
   /**
    * \param[in] group_type callback group type to create by this method.
+   * \param[in] automatically_add_to_executor_with_node A boolean that
+   *   determines whether a callback group is automatically added to an executor
+   *   with the node with which it is associated.
    * \return a callback group
    */
   RCLCPP_LIFECYCLE_PUBLIC
   rclcpp::CallbackGroup::SharedPtr
-  create_callback_group(rclcpp::CallbackGroupType group_type);
+  create_callback_group(
+    rclcpp::CallbackGroupType group_type,
+    bool automatically_add_to_executor_with_node = true);
 
   /// Return the list of callback groups in the node.
   /**
@@ -219,13 +230,8 @@ public:
     typename MessageT,
     typename CallbackT,
     typename AllocatorT = std::allocator<void>,
-    typename CallbackMessageT =
-    typename rclcpp::subscription_traits::has_message_type<CallbackT>::type,
     typename SubscriptionT = rclcpp::Subscription<MessageT, AllocatorT>,
-    typename MessageMemoryStrategyT = rclcpp::message_memory_strategy::MessageMemoryStrategy<
-      CallbackMessageT,
-      AllocatorT
-    >>
+    typename MessageMemoryStrategyT = typename SubscriptionT::MessageMemoryStrategyType>
   std::shared_ptr<SubscriptionT>
   create_subscription(
     const std::string & topic_name,
@@ -273,6 +279,35 @@ public:
     CallbackT && callback,
     const rmw_qos_profile_t & qos_profile = rmw_qos_profile_services_default,
     rclcpp::CallbackGroup::SharedPtr group = nullptr);
+
+  /// Create and return a GenericPublisher.
+  /**
+   * \sa rclcpp::Node::create_generic_publisher
+   */
+  template<typename AllocatorT = std::allocator<void>>
+  std::shared_ptr<rclcpp::GenericPublisher> create_generic_publisher(
+    const std::string & topic_name,
+    const std::string & topic_type,
+    const rclcpp::QoS & qos,
+    const rclcpp::PublisherOptionsWithAllocator<AllocatorT> & options = (
+      rclcpp::PublisherOptionsWithAllocator<AllocatorT>()
+    )
+  );
+
+  /// Create and return a GenericSubscription.
+  /**
+   * \sa rclcpp::Node::create_generic_subscription
+   */
+  template<typename AllocatorT = std::allocator<void>>
+  std::shared_ptr<rclcpp::GenericSubscription> create_generic_subscription(
+    const std::string & topic_name,
+    const std::string & topic_type,
+    const rclcpp::QoS & qos,
+    std::function<void(std::shared_ptr<rclcpp::SerializedMessage>)> callback,
+    const rclcpp::SubscriptionOptionsWithAllocator<AllocatorT> & options = (
+      rclcpp::SubscriptionOptionsWithAllocator<AllocatorT>()
+    )
+  );
 
   /// Declare and initialize a parameter, return the effective value.
   /**

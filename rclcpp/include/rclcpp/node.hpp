@@ -17,6 +17,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <functional>
 #include <list>
 #include <map>
 #include <memory>
@@ -41,6 +42,8 @@
 #include "rclcpp/clock.hpp"
 #include "rclcpp/context.hpp"
 #include "rclcpp/event.hpp"
+#include "rclcpp/generic_publisher.hpp"
+#include "rclcpp/generic_subscription.hpp"
 #include "rclcpp/logger.hpp"
 #include "rclcpp/macros.hpp"
 #include "rclcpp/message_memory_strategy.hpp"
@@ -203,13 +206,8 @@ public:
     typename MessageT,
     typename CallbackT,
     typename AllocatorT = std::allocator<void>,
-    typename CallbackMessageT =
-    typename rclcpp::subscription_traits::has_message_type<CallbackT>::type,
-    typename SubscriptionT = rclcpp::Subscription<CallbackMessageT, AllocatorT>,
-    typename MessageMemoryStrategyT = rclcpp::message_memory_strategy::MessageMemoryStrategy<
-      CallbackMessageT,
-      AllocatorT
-    >
+    typename SubscriptionT = rclcpp::Subscription<MessageT, AllocatorT>,
+    typename MessageMemoryStrategyT = typename SubscriptionT::MessageMemoryStrategyType
   >
   std::shared_ptr<SubscriptionT>
   create_subscription(
@@ -265,6 +263,55 @@ public:
     CallbackT && callback,
     const rmw_qos_profile_t & qos_profile = rmw_qos_profile_services_default,
     rclcpp::CallbackGroup::SharedPtr group = nullptr);
+
+  /// Create and return a GenericPublisher.
+  /**
+   * The returned pointer will never be empty, but this function can throw various exceptions, for
+   * instance when the message's package can not be found on the AMENT_PREFIX_PATH.
+   *
+   * \param[in] topic_name Topic name
+   * \param[in] topic_type Topic type
+   * \param[in] qos %QoS settings
+   * \param options %Publisher options.
+   * Not all publisher options are currently respected, the only relevant options for this
+   * publisher are `event_callbacks`, `use_default_callbacks`, and `%callback_group`.
+   * \return Shared pointer to the created generic publisher.
+   */
+  template<typename AllocatorT = std::allocator<void>>
+  std::shared_ptr<rclcpp::GenericPublisher> create_generic_publisher(
+    const std::string & topic_name,
+    const std::string & topic_type,
+    const rclcpp::QoS & qos,
+    const rclcpp::PublisherOptionsWithAllocator<AllocatorT> & options = (
+      rclcpp::PublisherOptionsWithAllocator<AllocatorT>()
+    )
+  );
+
+  /// Create and return a GenericSubscription.
+  /**
+   * The returned pointer will never be empty, but this function can throw various exceptions, for
+   * instance when the message's package can not be found on the AMENT_PREFIX_PATH.
+   *
+   * \param[in] topic_name Topic name
+   * \param[in] topic_type Topic type
+   * \param[in] qos %QoS settings
+   * \param[in] callback Callback for new messages of serialized form
+   * \param[in] options %Subscription options.
+   * Not all subscription options are currently respected, the only relevant options for this
+ * subscription are `event_callbacks`, `use_default_callbacks`, `ignore_local_publications`, and
+ * `%callback_group`.
+   * \return Shared pointer to the created generic subscription.
+   */
+  template<typename AllocatorT = std::allocator<void>>
+  std::shared_ptr<rclcpp::GenericSubscription> create_generic_subscription(
+    const std::string & topic_name,
+    const std::string & topic_type,
+    const rclcpp::QoS & qos,
+    std::function<void(std::shared_ptr<rclcpp::SerializedMessage>)> callback,
+    const rclcpp::SubscriptionOptionsWithAllocator<AllocatorT> & options = (
+      rclcpp::SubscriptionOptionsWithAllocator<AllocatorT>()
+    )
+  );
 
   /// Declare and initialize a parameter, return the effective value.
   /**
@@ -839,6 +886,9 @@ public:
    * and an optional reason that can be used in error reporting when it fails.
    *
    * This allows the node developer to control which parameters may be changed.
+   *
+   * It is considered bad practice to reject changes for "unknown" parameters as this prevents
+   * other parts of the node (that may be aware of these parameters) from handling them.
    *
    * Note that the callback is called when declare_parameter() and its variants
    * are called, and so you cannot assume the parameter has been set before

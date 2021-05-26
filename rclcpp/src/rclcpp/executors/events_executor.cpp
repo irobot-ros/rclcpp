@@ -47,7 +47,7 @@ EventsExecutor::EventsExecutor(
   // Setup the executor notifier to wake up the executor when some guard conditions are tiggered.
   // The added guard conditions are guaranteed to not go out of scope before the executor itself.
   executor_notifier_ = std::make_shared<EventsExecutorNotifyWaitable>();
-  executor_notifier_->add_guard_condition(&shutdown_guard_condition_->get_rcl_guard_condition());
+  executor_notifier_->add_guard_condition(shutdown_guard_condition_.get());
   executor_notifier_->add_guard_condition(&interrupt_guard_condition_);
 
   entities_collector_->add_waitable(executor_notifier_);
@@ -253,7 +253,7 @@ EventsExecutor::execute_event(const ExecutorEvent & event)
   switch (event.type) {
     case SUBSCRIPTION_EVENT:
       {
-        auto subscription = entities_collector_->get_subscription(event.entity_id);
+        auto subscription = entities_collector_->get_subscription(event.exec_entity_id);
 
         if (subscription) {
           for (size_t i = 0; i < event.num_events; i++) {
@@ -265,7 +265,7 @@ EventsExecutor::execute_event(const ExecutorEvent & event)
 
     case SERVICE_EVENT:
       {
-        auto service = entities_collector_->get_service(event.entity_id);
+        auto service = entities_collector_->get_service(event.exec_entity_id);
 
         if (service) {
           for (size_t i = 0; i < event.num_events; i++) {
@@ -277,7 +277,7 @@ EventsExecutor::execute_event(const ExecutorEvent & event)
 
     case CLIENT_EVENT:
       {
-        auto client = entities_collector_->get_client(event.entity_id);
+        auto client = entities_collector_->get_client(event.exec_entity_id);
 
         if (client) {
           for (size_t i = 0; i < event.num_events; i++) {
@@ -289,7 +289,7 @@ EventsExecutor::execute_event(const ExecutorEvent & event)
 
     case WAITABLE_EVENT:
       {
-        auto waitable = entities_collector_->get_waitable(event.entity_id);
+        auto waitable = entities_collector_->get_waitable(event.exec_entity_id);
 
         if (waitable) {
           for (size_t i = 0; i < event.num_events; i++) {

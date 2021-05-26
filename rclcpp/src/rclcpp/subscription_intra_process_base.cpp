@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <functional>
+
 #include "rclcpp/experimental/subscription_intra_process_base.hpp"
 
 using rclcpp::experimental::SubscriptionIntraProcessBase;
@@ -21,8 +23,9 @@ SubscriptionIntraProcessBase::add_to_wait_set(rcl_wait_set_t * wait_set)
 {
   std::lock_guard<std::recursive_mutex> lock(reentrant_mutex_);
 
-  rcl_ret_t ret = rcl_wait_set_add_guard_condition(wait_set, &gc_, NULL);
-  return RCL_RET_OK == ret;
+  gc_.add_to_wait_set(wait_set);
+
+  return true;
 }
 
 const char *
@@ -35,19 +38,4 @@ rmw_qos_profile_t
 SubscriptionIntraProcessBase::get_actual_qos() const
 {
   return qos_profile_;
-}
-
-void
-SubscriptionIntraProcessBase::set_listener_callback(
-  rmw_listener_callback_t callback,
-  const void * user_data) const
-{
-  rcl_ret_t ret = rcl_guard_condition_set_listener_callback(
-    &gc_,
-    callback,
-    user_data);
-
-  if (RCL_RET_OK != ret) {
-    throw std::runtime_error("Couldn't set guard condition listener callback");
-  }
 }

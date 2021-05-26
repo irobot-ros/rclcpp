@@ -104,8 +104,12 @@ public:
   get_associated_with_executor_atomic() override;
 
   RCLCPP_PUBLIC
-  rcl_guard_condition_t *
+  const rcl_guard_condition_t *
   get_notify_guard_condition() override;
+
+  RCLCPP_PUBLIC
+  rclcpp::GuardCondition *
+  get_notify_rclcpp_guard_condition() override;
 
   RCLCPP_PUBLIC
   std::unique_lock<std::recursive_mutex>
@@ -121,6 +125,10 @@ public:
   std::string
   resolve_topic_or_service_name(
     const std::string & name, bool is_service, bool only_expand = false) const override;
+
+  RCLCPP_PUBLIC
+  void
+  trigger_notify_guard_condition() override;
 
 private:
   RCLCPP_DISABLE_COPY(NodeBase)
@@ -138,7 +146,7 @@ private:
 
   /// Guard condition for notifying the Executor of changes to this node.
   mutable std::recursive_mutex notify_guard_condition_mutex_;
-  rcl_guard_condition_t notify_guard_condition_ = rcl_get_zero_initialized_guard_condition();
+  rclcpp::GuardCondition notify_guard_condition_;
   bool notify_guard_condition_is_valid_;
 };
 

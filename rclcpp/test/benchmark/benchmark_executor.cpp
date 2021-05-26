@@ -42,7 +42,7 @@ public:
         nodes[i]->create_publisher<test_msgs::msg::Empty>(
           "/empty_msgs_" + std::to_string(i), rclcpp::QoS(10)));
 
-      auto callback = [this](test_msgs::msg::Empty::SharedPtr) {this->callback_count++;};
+      auto callback = [this](test_msgs::msg::Empty::ConstSharedPtr) {this->callback_count++;};
       subscriptions.push_back(
         nodes[i]->create_subscription<test_msgs::msg::Empty>(
           "/empty_msgs_" + std::to_string(i), rclcpp::QoS(10), std::move(callback)));
@@ -376,9 +376,8 @@ BENCHMARK_F(
 
   auto memory_strategy = rclcpp::memory_strategies::create_default_strategy();
   rclcpp::GuardCondition guard_condition(shared_context);
-  rcl_guard_condition_t rcl_guard_condition = guard_condition.get_rcl_guard_condition();
 
-  entities_collector_->init(&wait_set, memory_strategy, &rcl_guard_condition);
+  entities_collector_->init(&wait_set, memory_strategy, &guard_condition);
   RCLCPP_SCOPE_EXIT(entities_collector_->fini());
 
   reset_heap_counters();

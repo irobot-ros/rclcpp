@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "rclcpp/exceptions.hpp"
@@ -39,6 +40,7 @@ SubscriptionBase::SubscriptionBase(
   bool is_serialized)
 : node_base_(node_base),
   node_handle_(node_base_->get_shared_rcl_node_handle()),
+  node_logger_(rclcpp::get_node_logger(node_handle_.get())),
   use_intra_process_(false),
   intra_process_subscription_id_(0),
   type_support_(type_support_handle),
@@ -115,7 +117,8 @@ SubscriptionBase::get_subscription_handle() const
   return subscription_handle_;
 }
 
-const std::vector<std::shared_ptr<rclcpp::QOSEventHandlerBase>> &
+const
+std::unordered_map<rcl_subscription_event_type_t, std::shared_ptr<rclcpp::QOSEventHandlerBase>> &
 SubscriptionBase::get_event_handlers() const
 {
   return event_handlers_;
@@ -281,7 +284,8 @@ SubscriptionBase::exchange_in_use_by_wait_set_state(
   if (get_intra_process_waitable().get() == pointer_to_subscription_part) {
     return intra_process_subscription_waitable_in_use_by_wait_set_.exchange(in_use_state);
   }
-  for (const auto & qos_event : event_handlers_) {
+  for (const auto & key_event_pair : event_handlers_) {
+    auto qos_event = key_event_pair.second;
     if (qos_event.get() == pointer_to_subscription_part) {
       return qos_events_in_use_by_wait_set_[qos_event.get()].exchange(in_use_state);
     }
@@ -290,16 +294,54 @@ SubscriptionBase::exchange_in_use_by_wait_set_state(
 }
 
 void
-SubscriptionBase::set_listener_callback(
-  rmw_listener_callback_t callback,
-  const void * user_data) const
+SubscriptionBase::set_on_new_message_callback(
+  rcl_event_callback_t callback,
+  const void * user_data)
 {
-  rcl_ret_t ret = rcl_subscription_set_listener_callback(
+  rcl_ret_t ret = rcl_subscription_set_on_new_message_callback(
     subscription_handle_.get(),
     callback,
     user_data);
 
   if (RCL_RET_OK != ret) {
-    throw std::runtime_error("Couldn't set listener callback to subscription");
+    using rclcpp::exceptions::throw_from_rcl_error;
+    throw_from_rcl_error(ret, "failed to set the on new message callback for subscription");
   }
+}
+
+std::vector<rclcpp::NetworkFlowEndpoint> SubscriptionBase::get_network_flow_endpoints() const
+{
+  rcutils_allocator_t allocator = rcutils_get_default_allocator();
+  rcl_network_flow_endpoint_array_t network_flow_endpoint_array =
+    rcl_get_zero_initialized_network_flow_endpoint_array();
+  rcl_ret_t ret = rcl_subscription_get_network_flow_endpoints(
+    subscription_handle_.get(), &allocator, &network_flow_endpoint_array);
+  if (RCL_RET_OK != ret) {
+    auto error_msg = std::string("Error obtaining network flows of subscription: ") +
+      rcl_get_error_string().str;
+    rcl_reset_error();
+    if (RCL_RET_OK !=
+      rcl_network_flow_endpoint_array_fini(&network_flow_endpoint_array))
+    {
+      error_msg += std::string(". Also error cleaning up network flow array: ") +
+        rcl_get_error_string().str;
+      rcl_reset_error();
+    }
+    rclcpp::exceptions::throw_from_rcl_error(ret, error_msg);
+  }
+
+  std::vector<rclcpp::NetworkFlowEndpoint> network_flow_endpoint_vector;
+  for (size_t i = 0; i < network_flow_endpoint_array.size; ++i) {
+    network_flow_endpoint_vector.push_back(
+      rclcpp::NetworkFlowEndpoint(
+        network_flow_endpoint_array.
+        network_flow_endpoint[i]));
+  }
+
+  ret = rcl_network_flow_endpoint_array_fini(&network_flow_endpoint_array);
+  if (RCL_RET_OK != ret) {
+    rclcpp::exceptions::throw_from_rcl_error(ret, "error cleaning up network flow array");
+  }
+
+  return network_flow_endpoint_vector;
 }

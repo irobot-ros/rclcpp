@@ -3,6 +3,46 @@ Changelog for package rclcpp_action
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
+11.0.0 (2021-05-18)
+-------------------
+* Bump the benchmark timeout for benchmark_action_client (`#1671 <https://github.com/ros2/rclcpp/issues/1671>`_)
+* Contributors: Scott K Logan
+
+10.0.0 (2021-05-11)
+-------------------
+* Returns CancelResponse::REJECT while goal handle failed to transit to CANCELING state (`#1641 <https://github.com/ros2/rclcpp/issues/1641>`_)
+* Fix action server deadlock issue that caused by other mutexes locked in CancelCallback (`#1635 <https://github.com/ros2/rclcpp/issues/1635>`_)
+* Contributors: Kaven Yau
+
+9.0.2 (2021-04-14)
+------------------
+
+9.0.1 (2021-04-12)
+------------------
+
+9.0.0 (2021-04-06)
+------------------
+* updating quality declaration links (re: `ros2/docs.ros2.org#52 <https://github.com/ros2/docs.ros2.org/issues/52>`_) (`#1615 <https://github.com/ros2/rclcpp/issues/1615>`_)
+* Contributors: shonigmann
+
+8.2.0 (2021-03-31)
+------------------
+
+8.1.0 (2021-03-25)
+------------------
+
+8.0.0 (2021-03-23)
+------------------
+
+7.0.1 (2021-03-22)
+------------------
+
+7.0.0 (2021-03-18)
+------------------
+* Add support for rmw_connextdds (`#1574 <https://github.com/ros2/rclcpp/issues/1574>`_)
+* node_handle must be destroyed after client_handle to prevent memory leak (`#1562 <https://github.com/ros2/rclcpp/issues/1562>`_)
+* Contributors: Andrea Sorbini, Tomoya Fujita
+
 6.3.1 (2021-02-08)
 ------------------
 * Finalize rcl_handle to prevent leak (`#1528 <https://github.com/ros2/rclcpp/issues/1528>`_) (`#1529 <https://github.com/ros2/rclcpp/issues/1529>`_)

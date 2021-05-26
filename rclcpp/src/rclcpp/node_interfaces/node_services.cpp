@@ -41,15 +41,7 @@ NodeServices::add_service(
   }
 
   // Notify the executor that a new service was created using the parent Node.
-  {
-    auto notify_guard_condition_lock = node_base_->acquire_notify_guard_condition_lock();
-    if (rcl_trigger_guard_condition(node_base_->get_notify_guard_condition()) != RCL_RET_OK) {
-      throw std::runtime_error(
-              std::string("Failed to notify wait set on service creation: ") +
-              rmw_get_error_string().str
-      );
-    }
-  }
+  node_base_->trigger_notify_guard_condition();
 }
 
 void
@@ -68,15 +60,7 @@ NodeServices::add_client(
   }
 
   // Notify the executor that a new client was created using the parent Node.
-  {
-    auto notify_guard_condition_lock = node_base_->acquire_notify_guard_condition_lock();
-    if (rcl_trigger_guard_condition(node_base_->get_notify_guard_condition()) != RCL_RET_OK) {
-      throw std::runtime_error(
-              std::string("Failed to notify wait set on client creation: ") +
-              rmw_get_error_string().str
-      );
-    }
-  }
+  node_base_->trigger_notify_guard_condition();
 }
 
 std::string

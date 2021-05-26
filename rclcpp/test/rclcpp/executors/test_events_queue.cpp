@@ -60,6 +60,6 @@ TEST(TestEventsQueue, SimpleQueueTest)
   rclcpp::executors::ExecutorEvent front_event = simple_queue->front();
 
   // The events should be equal
-  EXPECT_EQ(push_event.entity_id, front_event.entity_id);
+  EXPECT_EQ(push_event.exec_entity_id, front_event.exec_entity_id);
   EXPECT_EQ(push_event.type, front_event.type);
 }

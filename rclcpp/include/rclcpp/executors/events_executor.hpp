@@ -29,8 +29,6 @@
 #include "rclcpp/experimental/buffers/simple_events_queue.hpp"
 #include "rclcpp/node.hpp"
 
-#include "rmw/listener_callback_type.h"
-
 namespace rclcpp
 {
 namespace executors
@@ -210,31 +208,6 @@ protected:
 
 private:
   RCLCPP_DISABLE_COPY(EventsExecutor)
-
-  // Executor callback: Push new events into the queue and trigger cv.
-  // This function is called by the DDS entities when an event happened,
-  // like a subscription receiving a message.
-  static void
-  push_event(const void * event_data, size_t num_events)
-  {
-    if (!event_data) {
-      throw std::runtime_error("Executor event data not valid.");
-    }
-
-    auto data = static_cast<const executors::EventsExecutorCallbackData *>(event_data);
-
-    executors::EventsExecutor * this_executor = data->executor;
-    ExecutorEvent event = data->event;
-    event.num_events = num_events;
-
-    // Event queue mutex scope
-    {
-      std::unique_lock<std::mutex> lock(this_executor->push_mutex_);
-      this_executor->events_queue_->push(event);
-    }
-    // Notify that the event queue has some events in it.
-    this_executor->events_queue_cv_.notify_one();
-  }
 
   // Execute a single event
   RCLCPP_PUBLIC
