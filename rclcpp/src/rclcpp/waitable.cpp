@@ -77,3 +77,12 @@ Waitable::clear_on_ready_callback()
           "Custom waitables should override clear_on_ready_callback "
           "if they want to use it.");
 }
+
+std::shared_ptr<void>
+Waitable::take_data_by_entity_id(int id)
+{
+  (void) id;
+  throw std::runtime_error(
+          "Custom waitables should override take_data_by_entity_id "
+          "if they want to use it.");
+}

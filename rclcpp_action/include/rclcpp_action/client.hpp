@@ -16,6 +16,7 @@
 #define RCLCPP_ACTION__CLIENT_HPP_
 
 #include <rclcpp/exceptions.hpp>
+#include <rclcpp/executors/events_executor_event_types.hpp>
 #include <rclcpp/macros.hpp>
 #include <rclcpp/node_interfaces/node_base_interface.hpp>
 #include <rclcpp/node_interfaces/node_logging_interface.hpp>
@@ -35,6 +36,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 #include <utility>
 
 #include "rclcpp_action/client_goal_handle.hpp"
@@ -61,6 +63,15 @@ class ClientBase : public rclcpp::Waitable
 public:
   RCLCPP_ACTION_PUBLIC
   virtual ~ClientBase();
+
+  enum class EntityType
+  {
+    GoalClient,
+    ResultClient,
+    CancelClient,
+    FeedbackSubscription,
+    StatusSubscription,
+  };
 
   /// Return true if there is an action server that is ready to take goal requests.
   RCLCPP_ACTION_PUBLIC
@@ -123,8 +134,24 @@ public:
 
   /// \internal
   RCLCPP_ACTION_PUBLIC
+  std::shared_ptr<void>
+  take_data_by_entity_id(int id) override;
+
+  /// \internal
+  RCLCPP_ACTION_PUBLIC
   void
   execute(std::shared_ptr<void> & data) override;
+
+  /// \internal
+  /// Set a callback to be called whenever the waitable becomes ready.
+  RCLCPP_ACTION_PUBLIC
+  void
+  set_on_ready_callback(std::function<void(size_t, int)> callback) override;
+
+  /// Unset the callback registered for new events, if any.
+  RCLCPP_ACTION_PUBLIC
+  void
+  clear_on_ready_callback() override;
 
   // End Waitables API
   // -----------------
@@ -244,8 +271,26 @@ protected:
   // End API for communication between ClientBase and Client<>
   // ---------------------------------------------------------
 
+  /// \internal
+  /// Set a callback to be called whenever the waitable becomes ready.
+  RCLCPP_ACTION_PUBLIC
+  void
+  set_on_ready_callback(
+    EntityType entity_type,
+    rcl_event_callback_t callback,
+    const void * user_data);
+
+  std::recursive_mutex reentrant_mutex_;
+  std::unordered_map<EntityType, std::function<void(size_t)>> entity_type_to_on_ready_callback_;
+
 private:
   std::unique_ptr<ClientBaseImpl> pimpl_;
+
+  RCLCPP_ACTION_PUBLIC
+  void
+  set_callback_to_entity(
+    EntityType entity_type,
+    std::function<void(size_t, int)> callback);
 };
 
 /// Action Client

@@ -126,6 +126,13 @@ public:
     );
   }
 
+  std::shared_ptr<void>
+  take_data_by_entity_id(int id) override
+  {
+    (void) id;
+    return take_data();
+  };
+
   void execute(std::shared_ptr<void> & data)
   {
     execute_impl<CallbackMessageT>(data);

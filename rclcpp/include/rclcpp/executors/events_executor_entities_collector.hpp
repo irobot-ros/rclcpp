@@ -201,6 +201,14 @@ public:
     return nullptr;
   }
 
+  RCLCPP_PUBLIC
+  std::shared_ptr<void>
+  take_data_by_entity_id(int id) override
+  {
+    (void) id;
+    return take_data();
+  };
+
 private:
   void
   set_callback_group_entities_callbacks(rclcpp::CallbackGroup::SharedPtr group);

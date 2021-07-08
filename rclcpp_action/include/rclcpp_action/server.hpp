@@ -18,6 +18,7 @@
 #include <rcl_action/action_server.h>
 #include <rosidl_runtime_c/action_type_support_struct.h>
 #include <rosidl_typesupport_cpp/action_type_support.hpp>
+#include <rclcpp/executors/events_executor_event_types.hpp>
 #include <rclcpp/node_interfaces/node_base_interface.hpp>
 #include <rclcpp/node_interfaces/node_clock_interface.hpp>
 #include <rclcpp/node_interfaces/node_logging_interface.hpp>
@@ -70,6 +71,13 @@ enum class CancelResponse : int8_t
 class ServerBase : public rclcpp::Waitable
 {
 public:
+  enum class EntityType
+  {
+    GoalService,
+    ResultService,
+    CancelService,
+  };
+
   RCLCPP_ACTION_PUBLIC
   virtual ~ServerBase();
 
@@ -122,11 +130,26 @@ public:
   std::shared_ptr<void>
   take_data() override;
 
+  RCLCPP_ACTION_PUBLIC
+  std::shared_ptr<void>
+  take_data_by_entity_id(int id) override;
+
   /// Act on entities in the wait set which are ready to be acted upon.
   /// \internal
   RCLCPP_ACTION_PUBLIC
   void
   execute(std::shared_ptr<void> & data) override;
+
+  /// Set a callback to be called whenever the waitable becomes ready.
+  /// \internal
+  RCLCPP_ACTION_PUBLIC
+  void
+  set_on_ready_callback(std::function<void(size_t, int)> callback) override;
+
+  /// Unset the callback to be called whenever the waitable becomes ready.
+  RCLCPP_ACTION_PUBLIC
+  void
+  clear_on_ready_callback() override;
 
   // End Waitables API
   // -----------------
@@ -256,6 +279,23 @@ private:
   /// Private implementation
   /// \internal
   std::unique_ptr<ServerBaseImpl> pimpl_;
+
+  RCLCPP_ACTION_PUBLIC
+  void
+  set_callback_to_entity(
+    EntityType entity_type,
+    std::function<void(size_t, int)> callback);
+
+protected:
+  std::recursive_mutex reentrant_mutex_;
+  std::unordered_map<EntityType, std::function<void(size_t)>> entity_type_to_on_ready_callback_;
+
+  RCLCPP_ACTION_PUBLIC
+  void
+  set_on_ready_callback(
+    EntityType entity_type,
+    rcl_event_callback_t callback,
+    const void * user_data);
 };
 
 /// Action Server

@@ -76,6 +76,14 @@ public:
     return nullptr;
   }
 
+  RCLCPP_PUBLIC
+  std::shared_ptr<void>
+  take_data_by_entity_id(int id)
+  {
+    (void) id;
+    return take_data();
+  };
+
 private:
   std::list<const rclcpp::GuardCondition *> notify_guard_conditions_;
 };

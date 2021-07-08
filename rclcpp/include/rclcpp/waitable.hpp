@@ -162,6 +162,11 @@ public:
   std::shared_ptr<void>
   take_data() = 0;
 
+  RCLCPP_PUBLIC
+  virtual
+  std::shared_ptr<void>
+  take_data_by_entity_id(int id);
+
   /// Execute data that is passed in.
   /**
    * Before calling this method, the Waitable should be added to a wait set,
