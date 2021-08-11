@@ -53,27 +53,19 @@ public:
 
   RCLCPP_PUBLIC
   void
-  add_guard_condition(const rcl_guard_condition_t * guard_condition)
+  add_guard_condition(const rclcpp::GuardCondition * guard_condition)
   {
     notify_guard_conditions_.push_back(guard_condition);
   }
 
   RCLCPP_PUBLIC
   void
-  set_listener_callback(
-    rmw_listener_callback_t callback,
-    const void * user_data) const override
+  set_on_ready_callback(std::function<void(size_t, int)> callback) override
   {
-    for (auto gc : notify_guard_conditions_) {
-      rcl_ret_t ret = rcl_guard_condition_set_listener_callback(
-        gc,
-        callback,
-        user_data);
-
-      if (RCL_RET_OK != ret) {
-        throw std::runtime_error("Couldn't set guard condition events callback");
-      }
-    }
+    (void)callback;
+    // for (auto gc : notify_guard_conditions_) {
+    //   gc->set_listener_callback();
+    // }
   }
 
   RCLCPP_PUBLIC
@@ -85,7 +77,7 @@ public:
   }
 
 private:
-  std::list<const rcl_guard_condition_t *> notify_guard_conditions_;
+  std::list<const rclcpp::GuardCondition *> notify_guard_conditions_;
 };
 
 }  // namespace executors

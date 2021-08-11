@@ -52,14 +52,14 @@ TEST(TestEventsQueue, SimpleQueueTest)
   EXPECT_TRUE(simple_queue->empty());
 
   // Lets push an event into the queue and get it back
-  rclcpp::executors::ExecutorEvent push_event = {simple_queue.get(),
-    rclcpp::executors::ExecutorEventType::SUBSCRIPTION_EVENT};
+  rclcpp::executors::ExecutorEvent push_event = {simple_queue.get(), 0,
+    rclcpp::executors::ExecutorEventType::SUBSCRIPTION_EVENT, 1};
 
   simple_queue->push(push_event);
 
   rclcpp::executors::ExecutorEvent front_event = simple_queue->front();
 
   // The events should be equal
-  EXPECT_EQ(push_event.entity_id, front_event.entity_id);
+  EXPECT_EQ(push_event.exec_entity_id, front_event.exec_entity_id);
   EXPECT_EQ(push_event.type, front_event.type);
 }

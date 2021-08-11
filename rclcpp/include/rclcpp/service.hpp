@@ -19,22 +19,27 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <sstream>
 #include <string>
 
 #include "rcl/error_handling.h"
 #include "rcl/service.h"
 
+#include "rmw/error_handling.h"
+#include "rmw/impl/cpp/demangle.hpp"
+#include "rmw/rmw.h"
+
+#include "tracetools/tracetools.h"
+
 #include "rclcpp/any_service_callback.hpp"
+#include "rclcpp/detail/cpp_callback_trampoline.hpp"
 #include "rclcpp/exceptions.hpp"
+#include "rclcpp/expand_topic_or_service_name.hpp"
+#include "rclcpp/logging.hpp"
 #include "rclcpp/macros.hpp"
 #include "rclcpp/type_support_decl.hpp"
-#include "rclcpp/expand_topic_or_service_name.hpp"
 #include "rclcpp/visibility_control.hpp"
-#include "rclcpp/logging.hpp"
-#include "rmw/error_handling.h"
-#include "rmw/rmw.h"
-#include "tracetools/tracetools.h"
 
 namespace rclcpp
 {
@@ -121,11 +126,88 @@ public:
   bool
   exchange_in_use_by_wait_set_state(bool in_use_state);
 
-  RCLCPP_PUBLIC
+  /// Set a callback to be called when each new request is received.
+  /**
+   * The callback receives a size_t which is the number of requests received
+   * since the last time this callback was called.
+   * Normally this is 1, but can be > 1 if requests were received before any
+   * callback was set.
+   *
+   * Since this callback is called from the middleware, you should aim to make
+   * it fast and not blocking.
+   * If you need to do a lot of work or wait for some other event, you should
+   * spin it off to another thread, otherwise you risk blocking the middleware.
+   *
+   * Calling it again will clear any previously set callback.
+   *
+   *
+   * An exception will be thrown if the callback is not callable.
+   *
+   * This function is thread-safe.
+   *
+   * If you want more information available in the callback, like the service
+   * or other information, you may use a lambda with captures or std::bind.
+   *
+   * \sa rmw_service_set_on_new_request_callback
+   * \sa rcl_service_set_on_new_request_callback
+   *
+   * \param[in] callback functor to be called when a new request is received
+   */
   void
-  set_listener_callback(
-    rmw_listener_callback_t callback,
-    const void * user_data) const;
+  set_on_new_request_callback(std::function<void(size_t)> callback)
+  {
+    if (!callback) {
+      throw std::invalid_argument(
+              "The callback passed to set_on_new_request_callback "
+              "is not callable.");
+    }
+
+    auto new_callback =
+      [callback, this](size_t number_of_requests) {
+        try {
+          callback(number_of_requests);
+        } catch (const std::exception & exception) {
+          RCLCPP_ERROR_STREAM(
+            node_logger_,
+            "rclcpp::ServiceBase@" << this <<
+              " caught " << rmw::impl::cpp::demangle(exception) <<
+              " exception in user-provided callback for the 'on new request' callback: " <<
+              exception.what());
+        } catch (...) {
+          RCLCPP_ERROR_STREAM(
+            node_logger_,
+            "rclcpp::ServiceBase@" << this <<
+              " caught unhandled exception in user-provided callback " <<
+              "for the 'on new request' callback");
+        }
+      };
+
+    std::lock_guard<std::recursive_mutex> lock(reentrant_mutex_);
+
+    // Set it temporarily to the new callback, while we replace the old one.
+    // This two-step setting, prevents a gap where the old std::function has
+    // been replaced but the middleware hasn't been told about the new one yet.
+    set_on_new_request_callback(
+      rclcpp::detail::cpp_callback_trampoline<const void *, size_t>,
+      static_cast<const void *>(&new_callback));
+
+    // Store the std::function to keep it in scope, also overwrites the existing one.
+    on_new_request_callback_ = new_callback;
+
+    // Set it again, now using the permanent storage.
+    set_on_new_request_callback(
+      rclcpp::detail::cpp_callback_trampoline<const void *, size_t>,
+      static_cast<const void *>(&on_new_request_callback_));
+  }
+
+  /// Unset the callback registered for new requests, if any.
+  void
+  clear_on_new_request_callback()
+  {
+    std::lock_guard<std::recursive_mutex> lock(reentrant_mutex_);
+    set_on_new_request_callback(nullptr, nullptr);
+    on_new_request_callback_ = nullptr;
+  }
 
 protected:
   RCLCPP_DISABLE_COPY(ServiceBase)
@@ -138,12 +220,21 @@ protected:
   const rcl_node_t *
   get_rcl_node_handle() const;
 
+  RCLCPP_PUBLIC
+  void
+  set_on_new_request_callback(rcl_event_callback_t callback, const void * user_data);
+
   std::shared_ptr<rcl_node_t> node_handle_;
 
   std::shared_ptr<rcl_service_t> service_handle_;
   bool owns_rcl_handle_ = true;
 
+  rclcpp::Logger node_logger_;
+
   std::atomic<bool> in_use_by_wait_set_{false};
+
+  std::recursive_mutex reentrant_mutex_;
+  std::function<void(size_t)> on_new_request_callback_{nullptr};
 };
 
 template<typename ServiceT>
@@ -183,25 +274,16 @@ public:
     using rosidl_typesupport_cpp::get_service_type_support_handle;
     auto service_type_support_handle = get_service_type_support_handle<ServiceT>();
 
-    std::weak_ptr<rcl_node_t> weak_node_handle(node_handle_);
     // rcl does the static memory allocation here
     service_handle_ = std::shared_ptr<rcl_service_t>(
-      new rcl_service_t, [weak_node_handle, service_name](rcl_service_t * service)
+      new rcl_service_t, [handle = node_handle_, service_name](rcl_service_t * service)
       {
-        auto handle = weak_node_handle.lock();
-        if (handle) {
-          if (rcl_service_fini(service, handle.get()) != RCL_RET_OK) {
-            RCLCPP_ERROR(
-              rclcpp::get_node_logger(handle.get()).get_child("rclcpp"),
-              "Error in destruction of rcl service handle: %s",
-              rcl_get_error_string().str);
-            rcl_reset_error();
-          }
-        } else {
-          RCLCPP_ERROR_STREAM(
-            rclcpp::get_logger("rclcpp"),
-            "Error in destruction of rcl service handle " << service_name <<
-              ": the Node Handle was destructed too early. You will leak memory");
+        if (rcl_service_fini(service, handle.get()) != RCL_RET_OK) {
+          RCLCPP_ERROR(
+            rclcpp::get_node_logger(handle.get()).get_child("rclcpp"),
+            "Error in destruction of rcl service handle: %s",
+            rcl_get_error_string().str);
+          rcl_reset_error();
         }
         delete service;
       });
@@ -353,15 +435,6 @@ public:
     auto response = std::make_shared<typename ServiceT::Response>();
     any_callback_.dispatch(request_header, typed_request, response);
     send_response(*request_header, *response);
-  }
-
-  [[deprecated("use the send_response() which takes references instead of shared pointers")]]
-  void
-  send_response(
-    std::shared_ptr<rmw_request_id_t> req_id,
-    std::shared_ptr<typename ServiceT::Response> response)
-  {
-    send_response(*req_id, *response);
   }
 
   void

@@ -47,17 +47,20 @@ namespace rclcpp_lifecycle
 
 LifecycleNode::LifecycleNode(
   const std::string & node_name,
-  const rclcpp::NodeOptions & options)
+  const rclcpp::NodeOptions & options,
+  bool enable_communication_interface)
 : LifecycleNode(
     node_name,
     "",
-    options)
+    options,
+    enable_communication_interface)
 {}
 
 LifecycleNode::LifecycleNode(
   const std::string & node_name,
   const std::string & namespace_,
-  const rclcpp::NodeOptions & options)
+  const rclcpp::NodeOptions & options,
+  bool enable_communication_interface)
 : node_base_(new rclcpp::node_interfaces::NodeBase(
       node_name,
       namespace_,
@@ -99,13 +102,14 @@ LifecycleNode::LifecycleNode(
       node_logging_,
       node_clock_,
       node_parameters_,
-      options.clock_qos()
+      options.clock_qos(),
+      options.use_clock_thread()
     )),
   node_waitables_(new rclcpp::node_interfaces::NodeWaitables(node_base_.get())),
   node_options_(options),
   impl_(new LifecycleNodeInterfaceImpl(node_base_, node_services_))
 {
-  impl_->init();
+  impl_->init(enable_communication_interface);
 
   register_on_configure(
     std::bind(
@@ -161,9 +165,10 @@ LifecycleNode::get_logger() const
 
 rclcpp::CallbackGroup::SharedPtr
 LifecycleNode::create_callback_group(
-  rclcpp::CallbackGroupType group_type)
+  rclcpp::CallbackGroupType group_type,
+  bool automatically_add_to_executor_with_node)
 {
-  return node_base_->create_callback_group(group_type);
+  return node_base_->create_callback_group(group_type, automatically_add_to_executor_with_node);
 }
 
 const rclcpp::ParameterValue &

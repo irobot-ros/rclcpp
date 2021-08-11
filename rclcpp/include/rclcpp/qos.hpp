@@ -18,6 +18,7 @@
 #include <string>
 
 #include "rclcpp/duration.hpp"
+#include "rclcpp/exceptions.hpp"
 #include "rclcpp/visibility_control.hpp"
 #include "rcl/logging_rosout.h"
 #include "rmw/incompatible_qos_events_statuses.h"
@@ -62,6 +63,13 @@ enum class LivelinessPolicy
   Unknown = RMW_QOS_POLICY_LIVELINESS_UNKNOWN,
 };
 
+enum class QoSCompatibility
+{
+  Ok = RMW_QOS_COMPATIBILITY_OK,
+  Warning = RMW_QOS_COMPATIBILITY_WARNING,
+  Error = RMW_QOS_COMPATIBILITY_ERROR,
+};
+
 /// QoS initialization values, cannot be created directly, use KeepAll or KeepLast instead.
 struct RCLCPP_PUBLIC QoSInitialization
 {
@@ -95,8 +103,8 @@ struct RCLCPP_PUBLIC KeepLast : public rclcpp::QoSInitialization
  * and other entities, and includes things like how data is sent or resent,
  * how data is buffered on the publishing and subscribing side, and other things.
  * See:
- *   <a href="https://index.ros.org/doc/ros2/Concepts/About-Quality-of-Service-Settings">
- *     https://index.ros.org/doc/ros2/Concepts/About-Quality-of-Service-Settings
+ *   <a href="https://docs.ros.org/en/rolling/Concepts/About-Quality-of-Service-Settings.html">
+ *     https://docs.ros.org/en/rolling/Concepts/About-Quality-of-Service-Settings.html
  *   </a>
  */
 class RCLCPP_PUBLIC QoS
@@ -272,6 +280,61 @@ RCLCPP_PUBLIC
 bool operator==(const QoS & left, const QoS & right);
 RCLCPP_PUBLIC
 bool operator!=(const QoS & left, const QoS & right);
+
+/// Result type for checking QoS compatibility
+/**
+ * \see rclcpp::qos_check_compatible()
+ */
+struct QoSCheckCompatibleResult
+{
+  /// Compatibility result.
+  QoSCompatibility compatibility;
+
+  /// Reason for a (possible) incompatibility.
+  /**
+   * Set if compatiblity is QoSCompatibility::Warning or QoSCompatiblity::Error.
+   * Not set if the QoS profiles are compatible.
+   */
+  std::string reason;
+};
+
+/// Check if two QoS profiles are compatible.
+/**
+ * Two QoS profiles are compatible if a publisher and subcription
+ * using the QoS policies can communicate with each other.
+ *
+ * If any policies have value "system default" or "unknown" then it is possible that
+ * compatiblity cannot be determined.
+ * In this case, the value QoSCompatility::Warning is set as part of
+ * the returned structure.
+ *
+ * Example usage:
+ *
+ * ```cpp
+ * rclcpp::QoSCheckCompatibleResult result = rclcpp::qos_check_compatible(
+ *   publisher_qos, subscription_qos);
+ * if (rclcpp::QoSCompatibility::Error != result.compatibility) {
+ *   // QoS not compatible ...
+ *   // result.reason contains info about the incompatibility
+ * } else if (rclcpp::QoSCompatibility::Warning != result.compatibility) {
+ *   // QoS may not be compatible ...
+ *   // result.reason contains info about the possible incompatibility
+ * }
+ * ```
+ *
+ * \param[in] publisher_qos: The QoS profile for a publisher.
+ * \param[in] subscription_qos: The QoS profile for a subscription.
+ * \return Struct with compatiblity set to QoSCompatibility::Ok if the QoS profiles are
+ *   compatible, or
+ * \return Struct with compatibility set to QoSCompatibility::Warning if there is a chance
+ *   the QoS profiles are not compatible, or
+ * \return Struct with compatibility set to QoSCompatibility::Error if the QoS profiles are
+ *   not compatible.
+ * \throws rclcpp::exceptions::QoSCheckCompatibilityException if an unexpected error occurs.
+ */
+RCLCPP_PUBLIC
+QoSCheckCompatibleResult
+qos_check_compatible(const QoS & publisher_qos, const QoS & subscription_qos);
 
 /**
  * Clock QoS class

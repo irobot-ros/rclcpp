@@ -20,9 +20,6 @@ namespace rclcpp
 namespace executors
 {
 
-// forward declaration of EventsExecutor to avoid circular dependency
-class EventsExecutor;
-
 enum ExecutorEventType
 {
   SUBSCRIPTION_EVENT,
@@ -33,45 +30,10 @@ enum ExecutorEventType
 
 struct ExecutorEvent
 {
-  const void * entity_id;
+  const void * exec_entity_id;
+  int gen_entity_id;
   ExecutorEventType type;
   size_t num_events;
-};
-
-// The EventsExecutorCallbackData struct is what the listeners
-// will use as argument when calling their callbacks from the
-// RMW implementation. The listeners get a (void *) of this struct,
-// and the executor is in charge to cast it back and use the data.
-struct EventsExecutorCallbackData
-{
-  EventsExecutorCallbackData(
-    EventsExecutor * _executor,
-    ExecutorEvent _event)
-  {
-    executor = _executor;
-    event = _event;
-  }
-
-  // Equal operator
-  bool operator==(const EventsExecutorCallbackData & other) const
-  {
-    return event.entity_id == other.event.entity_id;
-  }
-
-  // Struct members
-  EventsExecutor * executor;
-  ExecutorEvent event;
-};
-
-// To be able to use std::unordered_map with an EventsExecutorCallbackData
-// as key, we need a hasher. We use the entity ID as hash, since it is
-// unique for each EventsExecutorCallbackData object.
-struct KeyHasher
-{
-  size_t operator()(const EventsExecutorCallbackData & key) const
-  {
-    return std::hash<const void *>()(key.event.entity_id);
-  }
 };
 
 }  // namespace executors

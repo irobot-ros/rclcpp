@@ -47,7 +47,9 @@ public:
   RCLCPP_PUBLIC
   explicit GuardCondition(
     rclcpp::Context::SharedPtr context =
-    rclcpp::contexts::get_global_default_context());
+    rclcpp::contexts::get_global_default_context(),
+    rcl_guard_condition_options_t guard_condition_options =
+    rcl_guard_condition_get_default_options());
 
   RCLCPP_PUBLIC
   virtual
@@ -89,10 +91,25 @@ public:
   bool
   exchange_in_use_by_wait_set_state(bool in_use_state);
 
+  /// Adds the guard condition to a waitset
+  /**
+   * This function is thread-safe.
+   * \param[in] wait_set pointer to a wait set where to add the guard condition
+   */
+  RCLCPP_PUBLIC
+  void
+  add_to_wait_set(rcl_wait_set_t * wait_set) const;
+
+  RCLCPP_PUBLIC
+  void
+  set_on_trigger_callback(std::function<void(size_t)> callback);
+
 protected:
   rclcpp::Context::SharedPtr context_;
   rcl_guard_condition_t rcl_guard_condition_;
   std::atomic<bool> in_use_by_wait_set_{false};
+  std::function<void(size_t)> on_trigger_callback_{nullptr};
+  size_t unread_count_{0};
 };
 
 }  // namespace rclcpp

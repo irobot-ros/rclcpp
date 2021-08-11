@@ -221,7 +221,7 @@ TEST_F(TestWaitSet, add_guard_condition_to_two_different_wait_set) {
       wait_set2.add_guard_condition(guard_condition);
     }, std::runtime_error);
 
-    auto do_nothing = [](const std::shared_ptr<test_msgs::msg::BasicTypes>) {};
+    auto do_nothing = [](std::shared_ptr<const test_msgs::msg::BasicTypes>) {};
     auto sub = node->create_subscription<test_msgs::msg::BasicTypes>("~/test", 1, do_nothing);
     wait_set1.add_subscription(sub);
     ASSERT_THROW(
@@ -257,7 +257,7 @@ TEST_F(TestWaitSet, add_guard_condition_to_two_different_wait_set) {
     rclcpp::PublisherOptions po;
     po.event_callbacks.deadline_callback = [](rclcpp::QOSDeadlineOfferedInfo &) {};
     auto pub = node->create_publisher<test_msgs::msg::BasicTypes>("~/test", 1, po);
-    auto qos_event = pub->get_event_handlers()[0];
+    auto qos_event = pub->get_event_handlers().begin()->second;
     wait_set1.add_waitable(qos_event, pub);
     ASSERT_THROW(
     {
@@ -281,7 +281,7 @@ TEST_F(TestWaitSet, add_remove_wait) {
   rclcpp::SubscriptionOptions subscription_options;
   subscription_options.event_callbacks.deadline_callback = [](auto) {};
   subscription_options.event_callbacks.liveliness_callback = [](auto) {};
-  auto do_nothing = [](const std::shared_ptr<test_msgs::msg::BasicTypes>) {};
+  auto do_nothing = [](std::shared_ptr<const test_msgs::msg::BasicTypes>) {};
   auto sub =
     node->create_subscription<test_msgs::msg::BasicTypes>(
     "~/test", 1, do_nothing, subscription_options);
@@ -301,7 +301,7 @@ TEST_F(TestWaitSet, add_remove_wait) {
     [](rclcpp::QOSDeadlineOfferedInfo &) {};
   auto pub = node->create_publisher<test_msgs::msg::BasicTypes>(
     "~/test", 1, publisher_options);
-  auto qos_event = pub->get_event_handlers()[0];
+  auto qos_event = pub->get_event_handlers().begin()->second;
 
   // Subscription mask is required here for coverage.
   wait_set.add_subscription(sub, {true, true, true});

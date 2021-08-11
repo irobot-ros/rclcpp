@@ -125,7 +125,7 @@ protected:
 
   std::shared_ptr<rclcpp::Node> create_node_with_subscription(const std::string & name)
   {
-    auto subscription_callback = [](const test_msgs::msg::Empty::SharedPtr) {};
+    auto subscription_callback = [](test_msgs::msg::Empty::ConstSharedPtr) {};
     const rclcpp::QoS qos(10);
     auto node_with_subscription = create_node_with_disabled_callback_groups(name);
 
@@ -468,9 +468,9 @@ TEST_F(TestAllocatorMemoryStrategy, construct_destruct) {
 }
 
 TEST_F(TestAllocatorMemoryStrategy, add_remove_guard_conditions) {
-  rcl_guard_condition_t guard_condition1 = rcl_get_zero_initialized_guard_condition();
-  rcl_guard_condition_t guard_condition2 = rcl_get_zero_initialized_guard_condition();
-  rcl_guard_condition_t guard_condition3 = rcl_get_zero_initialized_guard_condition();
+  rclcpp::GuardCondition guard_condition1;
+  rclcpp::GuardCondition guard_condition2;
+  rclcpp::GuardCondition guard_condition3;
 
   EXPECT_NO_THROW(allocator_memory_strategy()->add_guard_condition(&guard_condition1));
   EXPECT_NO_THROW(allocator_memory_strategy()->add_guard_condition(&guard_condition2));
@@ -511,11 +511,10 @@ TEST_F(TestAllocatorMemoryStrategy, number_of_entities_with_subscription) {
   RclWaitSetSizes expected_sizes = {};
   expected_sizes.size_of_subscriptions = 1;
   const std::string implementation_identifier = rmw_get_implementation_identifier();
-  // TODO(asorbini): Remove Connext exception once ros2/rmw_connext is deprecated.
-  if (implementation_identifier == "rmw_connext_cpp" ||
-    implementation_identifier == "rmw_cyclonedds_cpp")
+  if (implementation_identifier == "rmw_cyclonedds_cpp" ||
+    implementation_identifier == "rmw_connextdds")
   {
-    // For cyclonedds, a subscription will also add an event and waitable
+    // For cyclonedds and connext, a subscription will also add an event and waitable
     expected_sizes.size_of_events += 1;
     expected_sizes.size_of_waitables += 1;
   }
@@ -586,24 +585,17 @@ TEST_F(TestAllocatorMemoryStrategy, add_handles_to_wait_set_client) {
 
 TEST_F(TestAllocatorMemoryStrategy, add_handles_to_wait_set_guard_condition) {
   auto node = create_node_with_disabled_callback_groups("node");
-  rcl_guard_condition_t guard_condition = rcl_get_zero_initialized_guard_condition();
   auto context = node->get_node_base_interface()->get_context();
-  rcl_context_t * rcl_context = context->get_rcl_context().get();
-  rcl_guard_condition_options_t guard_condition_options = {
-    rcl_get_default_allocator()};
 
-  EXPECT_EQ(
-    RCL_RET_OK,
-    rcl_guard_condition_init(&guard_condition, rcl_context, guard_condition_options));
-  RCLCPP_SCOPE_EXIT(
-  {
-    EXPECT_EQ(RCL_RET_OK, rcl_guard_condition_fini(&guard_condition));
-  });
+  rclcpp::GuardCondition guard_condition(context);
+
+  EXPECT_NO_THROW(rclcpp::GuardCondition guard_condition(context););
 
   allocator_memory_strategy()->add_guard_condition(&guard_condition);
+
   RclWaitSetSizes insufficient_capacities = SufficientWaitSetCapacities();
   insufficient_capacities.size_of_guard_conditions = 0;
-  EXPECT_TRUE(TestAddHandlesToWaitSet(node, insufficient_capacities));
+  EXPECT_THROW(TestAddHandlesToWaitSet(node, insufficient_capacities), std::runtime_error);
 }
 
 TEST_F(TestAllocatorMemoryStrategy, add_handles_to_wait_set_timer) {
@@ -781,7 +773,7 @@ TEST_F(TestAllocatorMemoryStrategy, get_next_subscription_out_of_scope) {
 
     subscription_options.callback_group = callback_group;
 
-    auto subscription_callback = [](const test_msgs::msg::Empty::SharedPtr) {};
+    auto subscription_callback = [](test_msgs::msg::Empty::ConstSharedPtr) {};
     const rclcpp::QoS qos(10);
 
     auto subscription = node->create_subscription<
