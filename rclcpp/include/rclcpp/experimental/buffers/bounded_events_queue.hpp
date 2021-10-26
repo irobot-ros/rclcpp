@@ -168,8 +168,6 @@ public:
   init(rclcpp::executors::EventsExecutorEntitiesCollector::SharedPtr entities_collector)
   {
     entities_collector_ = entities_collector;
-    // Make sure the queue is empty when we start
-    event_queue_.clear();
   }
 
 private:
