@@ -79,14 +79,14 @@ public:
     {
       std::unique_lock<std::mutex> lock(mutex_);
       for (size_t ev = 0; ev < event.num_events; ev++) {
-        if(queue_policy_ == QueuePolicy::NotBounded) {
+        if (queue_policy_ == QueuePolicy::NotBounded) {
           // Just push the event. No checks
           event_queue_.push_back(single_event);
         } else {
           if (!max_events_limit_reached(event)) {
             // Push the event only if the limit has not been reached
             event_queue_.push_back(single_event);
-          } else if(queue_policy_ == QueuePolicy::BoundedWithTimeOrdering) {
+          } else if (queue_policy_ == QueuePolicy::BoundedWithTimeOrdering) {
             // Relocate the event, if we want to keep time ordering of events
             remove_first_and_push_back(event);
           }

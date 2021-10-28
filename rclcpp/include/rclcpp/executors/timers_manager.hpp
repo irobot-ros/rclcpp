@@ -68,8 +68,11 @@ public:
    *
    * @param context custom context to be used.
    * Shared ownership of the context is held until destruction.
+   * @param on_ready_callback The timers on ready callback
    */
-  explicit TimersManager(std::shared_ptr<rclcpp::Context> context);
+  explicit TimersManager(
+    std::shared_ptr<rclcpp::Context> context,
+    std::function<void(void *)> on_ready_callback = nullptr);
 
   /**
    * @brief Destruct the TimersManager object making sure to stop thread and release memory.
@@ -139,6 +142,14 @@ public:
   bool execute_head_timer();
 
   /**
+   * @brief Executes timer identified by its ID.
+   * This function is thread safe.
+   *
+   * @param timer_id the timer ID of the timer to execute
+   */
+  void execute_ready_timer(const void * timer_id);
+
+  /**
    * @brief Get the amount of time before the next timer triggers.
    * This function is thread safe.
    *
@@ -151,6 +162,9 @@ public:
 
 private:
   RCLCPP_DISABLE_COPY(TimersManager)
+
+  // Callback to be called when timer is ready
+  std::function<void(void *)> on_ready_callback_ = nullptr;
 
   using TimerPtr = rclcpp::TimerBase::SharedPtr;
   using WeakTimerPtr = rclcpp::TimerBase::WeakPtr;
@@ -206,6 +220,17 @@ public:
       }
 
       return removed;
+    }
+
+    TimerPtr get_timer(const void * timer_id)
+    {
+      for (auto & weak_timer : weak_heap_) {
+        auto timer = weak_timer.lock();
+        if (timer.get() == timer_id) {
+          return timer;
+        }
+      }
+      return nullptr;
     }
 
     /**

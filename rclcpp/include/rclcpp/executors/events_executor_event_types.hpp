@@ -22,6 +22,7 @@ namespace executors
 
 enum ExecutorEventType
 {
+  TIMER_EVENT,
   SUBSCRIPTION_EVENT,
   SERVICE_EVENT,
   CLIENT_EVENT,

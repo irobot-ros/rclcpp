@@ -63,11 +63,14 @@ public:
 
   /// Default constructor. See the default constructor for Executor.
   /**
+   * \param[in] async_timer_execution Option to execute timers asynchronously.
+   * Instead of executing the timers, they push a timer event into the queue.
    * \param[in] events_queue The queue used to store events.
    * \param[in] options Options used to configure the executor.
    */
   RCLCPP_PUBLIC
   explicit EventsExecutor(
+    bool async_timer_execution = false,
     rclcpp::experimental::buffers::EventsQueue::UniquePtr events_queue = std::make_unique<
       rclcpp::experimental::buffers::BoundedEventsQueue>(),
     const rclcpp::ExecutorOptions & options = rclcpp::ExecutorOptions());

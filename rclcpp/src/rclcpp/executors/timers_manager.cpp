@@ -19,9 +19,14 @@
 
 using rclcpp::executors::TimersManager;
 
-TimersManager::TimersManager(std::shared_ptr<rclcpp::Context> context)
+TimersManager::TimersManager(
+  std::shared_ptr<rclcpp::Context> context,
+  std::function<void(void *)> on_ready_callback)
 {
   context_ = context;
+  if (on_ready_callback) {
+    on_ready_callback_ = on_ready_callback;
+  }
 }
 
 TimersManager::~TimersManager()
@@ -129,25 +134,41 @@ bool TimersManager::execute_head_timer()
   }
 
   std::unique_lock<std::mutex> lock(timers_mutex_);
-
-  TimersHeap timers_heap = weak_timers_heap_.validate_and_lock();
+  TimersHeap locked_heap = weak_timers_heap_.validate_and_lock();
 
   // Nothing to do if we don't have any timer
-  if (timers_heap.empty()) {
+  if (locked_heap.empty()) {
     return false;
   }
 
-  TimerPtr head_timer = timers_heap.front();
+  TimerPtr head_timer = locked_heap.front();
 
   const bool timer_ready = head_timer->is_ready();
   if (timer_ready) {
-    // Invoke the timer callback
-    head_timer->execute_callback();
-    timers_heap.heapify_root();
-    weak_timers_heap_.store(timers_heap);
+    if (on_ready_callback_) {
+      on_ready_callback_(head_timer.get());
+      head_timer->update_next_call_time();
+    } else {
+      head_timer->execute_callback();
+    }
+    // Executing a timer will result in updating its time_until_trigger, so re-heapify
+    locked_heap.heapify_root();
+    weak_timers_heap_.store(locked_heap);
   }
 
   return timer_ready;
+}
+
+void TimersManager::execute_ready_timer(const void * timer_id)
+{
+  TimerPtr ready_timer;
+  {
+    std::unique_lock<std::mutex> lock(timers_mutex_);
+    ready_timer = weak_timers_heap_.get_timer(timer_id);
+  }
+  if (ready_timer) {
+    ready_timer->execute_callback_delegate();
+  }
 }
 
 std::chrono::nanoseconds TimersManager::get_head_timeout_unsafe()
@@ -194,11 +215,15 @@ void TimersManager::execute_ready_timers_unsafe()
   const size_t number_ready_timers = locked_heap.get_number_ready_timers();
   size_t executed_timers = 0;
   while (executed_timers < number_ready_timers && head_timer->is_ready()) {
-    // Execute head timer
-    head_timer->execute_callback();
-    executed_timers++;
+    if (on_ready_callback_) {
+      on_ready_callback_(head_timer.get());
+      head_timer->update_next_call_time();
+    } else {
+      head_timer->execute_callback();
+    }
     // Executing a timer will result in updating its time_until_trigger, so re-heapify
     locked_heap.heapify_root();
+    executed_timers++;
     // Get new head timer
     head_timer = locked_heap.front();
   }

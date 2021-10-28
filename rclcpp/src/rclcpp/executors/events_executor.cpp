@@ -26,12 +26,21 @@ using namespace std::chrono_literals;
 using rclcpp::executors::EventsExecutor;
 
 EventsExecutor::EventsExecutor(
+  bool async_timer_execution,
   rclcpp::experimental::buffers::EventsQueue::UniquePtr events_queue,
   const rclcpp::ExecutorOptions & options)
 : rclcpp::Executor(options)
 {
   // Create timers manager
-  timers_manager_ = std::make_shared<TimersManager>(context_);
+  if (async_timer_execution) {
+    auto timer_on_ready_cb = [this](const void * timer_id) {
+      ExecutorEvent event = {timer_id, -1, TIMER_EVENT, 1};
+      this->events_queue_->enqueue(event);
+    };
+    timers_manager_ = std::make_shared<TimersManager>(context_, timer_on_ready_cb);
+  } else {
+    timers_manager_ = std::make_shared<TimersManager>(context_);
+  }
 
   // Create entities collector
   entities_collector_ = std::make_shared<EventsExecutorEntitiesCollector>(this);
@@ -217,6 +226,12 @@ void
 EventsExecutor::execute_event(const ExecutorEvent & event)
 {
   switch (event.type) {
+    case TIMER_EVENT:
+      {
+        timers_manager_->execute_ready_timer(event.exec_entity_id);
+        break;
+      }
+
     case SUBSCRIPTION_EVENT:
       {
         auto subscription = entities_collector_->get_subscription(event.exec_entity_id);

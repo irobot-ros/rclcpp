@@ -92,9 +92,20 @@ public:
   reset();
 
   /// Call the callback function when the timer signal is emitted.
+  /// It also resets the timer next call time
   RCLCPP_PUBLIC
   virtual void
   execute_callback() = 0;
+
+  /// Call the callback function but don't update the next call time
+  RCLCPP_PUBLIC
+  virtual void
+  execute_callback_delegate() = 0;
+
+  /// Update the timer next call time
+  RCLCPP_PUBLIC
+  virtual void
+  update_next_call_time() = 0;
 
   RCLCPP_PUBLIC
   std::shared_ptr<const rcl_timer_t>
@@ -207,6 +218,22 @@ public:
   void
   execute_callback() override
   {
+    update_next_call_time();
+    TRACEPOINT(callback_start, static_cast<const void *>(&callback_), false);
+    execute_callback_delegate<>();
+    TRACEPOINT(callback_end, static_cast<const void *>(&callback_));
+  }
+
+  void
+  execute_callback_delegate() override
+  {
+    TRACEPOINT(callback_start, static_cast<const void *>(&callback_), false);
+    execute_callback_delegate<>();
+    TRACEPOINT(callback_end, static_cast<const void *>(&callback_));
+  }
+
+  void update_next_call_time() override
+  {
     rcl_ret_t ret = rcl_timer_call(timer_handle_.get());
     if (ret == RCL_RET_TIMER_CANCELED) {
       return;
@@ -214,9 +241,6 @@ public:
     if (ret != RCL_RET_OK) {
       throw std::runtime_error("Failed to notify timer that callback occurred");
     }
-    TRACEPOINT(callback_start, static_cast<const void *>(&callback_), false);
-    execute_callback_delegate<>();
-    TRACEPOINT(callback_end, static_cast<const void *>(&callback_));
   }
 
   // void specialization
@@ -226,7 +250,7 @@ public:
       rclcpp::function_traits::same_arguments<CallbackT, VoidCallbackType>::value
     >::type * = nullptr
   >
-  void
+  inline void
   execute_callback_delegate()
   {
     callback_();
@@ -238,7 +262,7 @@ public:
       rclcpp::function_traits::same_arguments<CallbackT, TimerCallbackType>::value
     >::type * = nullptr
   >
-  void
+  inline void
   execute_callback_delegate()
   {
     callback_(*this);
