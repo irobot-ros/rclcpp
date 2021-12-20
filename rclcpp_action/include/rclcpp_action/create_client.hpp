@@ -48,7 +48,8 @@ create_client(
   rclcpp::node_interfaces::NodeWaitablesInterface::SharedPtr node_waitables_interface,
   const std::string & name,
   rclcpp::CallbackGroup::SharedPtr group = nullptr,
-  const rcl_action_client_options_t & options = rcl_action_client_get_default_options())
+  const rcl_action_client_options_t & options = rcl_action_client_get_default_options(),
+  rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::Disable)
 {
   std::weak_ptr<rclcpp::node_interfaces::NodeWaitablesInterface> weak_node =
     node_waitables_interface;
@@ -85,10 +86,15 @@ create_client(
       node_graph_interface,
       node_logging_interface,
       name,
-      options),
+      options,
+      ipc_setting),
     deleter);
 
   node_waitables_interface->add_waitable(action_client, group);
+
+  auto intra_process_action_client = action_client->get_intra_process_waitable();
+  node_waitables_interface->add_waitable(intra_process_action_client, group);
+
   return action_client;
 }
 
@@ -106,7 +112,8 @@ create_client(
   NodeT node,
   const std::string & name,
   rclcpp::CallbackGroup::SharedPtr group = nullptr,
-  const rcl_action_client_options_t & options = rcl_action_client_get_default_options())
+  const rcl_action_client_options_t & options = rcl_action_client_get_default_options(),
+  rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::Disable)
 {
   return rclcpp_action::create_client<ActionT>(
     node->get_node_base_interface(),
@@ -115,7 +122,8 @@ create_client(
     node->get_node_waitables_interface(),
     name,
     group,
-    options);
+    options,
+    ipc_setting);
 }
 }  // namespace rclcpp_action
 

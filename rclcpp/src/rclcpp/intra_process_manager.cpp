@@ -143,6 +143,113 @@ IntraProcessManager::add_intra_process_service(ServiceIntraProcessBase::SharedPt
   return service_id;
 }
 
+uint64_t
+IntraProcessManager::add_intra_process_action_client(
+  ActionClientIntraProcessBase::SharedPtr client)
+{
+  std::unique_lock<std::shared_timed_mutex> lock(mutex_);
+
+  uint64_t client_id = IntraProcessManager::get_next_unique_id();
+  action_clients_[client_id] = client;
+
+  // adds the intra-process action client to the matchable action server
+  for (auto & pair : action_servers_) {
+    auto server = pair.second.lock();
+    if (!server) {
+      continue;
+    }
+    if (can_communicate(client, server)) {
+      uint64_t server_id = pair.first;
+      action_clients_to_servers_.emplace(client_id, server_id);
+      break;
+    }
+  }
+  return client_id;
+}
+
+uint64_t
+IntraProcessManager::add_intra_process_action_server(
+  ActionServerIntraProcessBase::SharedPtr server)
+{
+  std::unique_lock<std::shared_timed_mutex> lock(mutex_);
+
+  // First check if we have already a server registered with same server name
+  auto it = action_servers_.begin();
+
+  while (it != action_servers_.end()) {
+    auto ipc_action_server = it->second.lock();
+    if (ipc_action_server) {
+      if (ipc_action_server->get_action_name() == server->get_action_name()) {
+        throw std::runtime_error(
+                "Can't have multiple action servers with same server name.");
+      }
+      it++;
+    } else {
+      it = action_servers_.erase(it);
+    }
+  }
+
+  uint64_t server_id = IntraProcessManager::get_next_unique_id();
+  action_servers_[server_id] = server;
+
+  // adds the server to the matchable action_clients
+  for (auto & pair : action_clients_) {
+    auto ipc_action_client = pair.second.lock();
+    if (!ipc_action_client) {
+      continue;
+    }
+    if (can_communicate(ipc_action_client, server)) {
+      uint64_t client_id = pair.first;
+      action_clients_to_servers_.emplace(client_id, server_id);
+    }
+  }
+  return server_id;
+}
+
+// Store an intra-process action client ID along its current
+// goal UUID, since later when the server process a request
+// it'll use the goal UUID to retrieve the client which asked for
+// the result.
+void
+IntraProcessManager::store_intra_process_action_client_goal_uuid(
+  uint64_t ipc_action_client_id,
+  size_t uuid)
+{
+  std::unique_lock<std::shared_timed_mutex> lock(mutex_);
+  clients_uuid_to_id_[uuid] = ipc_action_client_id;
+}
+
+// Remove an action client goal UUID entry
+void
+IntraProcessManager::remove_intra_process_action_client_goal_uuid(size_t uuid)
+{
+  std::unique_lock<std::shared_timed_mutex> lock(mutex_);
+
+  auto iter = clients_uuid_to_id_.find(uuid);
+
+  if (iter == clients_uuid_to_id_.end()) {
+    throw std::runtime_error(
+            "No ipc action clients stored with this UUID.");
+  }
+
+  clients_uuid_to_id_.erase(iter);
+}
+
+uint64_t
+IntraProcessManager::get_action_client_id_from_goal_uuid(size_t uuid)
+{
+  std::unique_lock<std::shared_timed_mutex> lock(mutex_);
+
+  auto iter = clients_uuid_to_id_.find(uuid);
+
+  if (iter == clients_uuid_to_id_.end()) {
+    throw std::runtime_error(
+            "No ipc action clients stored with this UUID.");
+  }
+
+  return iter->second;
+}
+
 void
 IntraProcessManager::remove_subscription(uint64_t intra_process_subscription_id)
 {
@@ -197,6 +304,43 @@ IntraProcessManager::remove_service(uint64_t intra_process_service_id)
   while (it != clients_to_services_.end()) {
     if (it->second == intra_process_service_id) {
       it = clients_to_services_.erase(it);
+    } else {
+      it++;
+    }
+  }
+}
+
+void
+IntraProcessManager::remove_action_client(uint64_t ipc_action_client_id)
+{
+  std::unique_lock<std::shared_timed_mutex> lock(mutex_);
+
+  action_clients_.erase(ipc_action_client_id);
+  action_clients_to_servers_.erase(ipc_action_client_id);
+
+  auto it = clients_uuid_to_id_.begin();
+
+  while (it != clients_uuid_to_id_.end()) {
+    if (it->second == ipc_action_client_id) {
+      it = clients_uuid_to_id_.erase(it);
+    } else {
+      it++;
+    }
+  }
+}
+
+void
+IntraProcessManager::remove_action_server(uint64_t ipc_action_server_id)
+{
+  std::unique_lock<std::shared_timed_mutex> lock(mutex_);
+
+  action_servers_.erase(ipc_action_server_id);
+
+  auto it = action_clients_to_servers_.begin();
+
+  while (it != action_clients_to_servers_.end()) {
+    if (it->second == ipc_action_server_id) {
+      it = action_clients_to_servers_.erase(it);
     } else {
       it++;
     }
@@ -279,20 +423,6 @@ IntraProcessManager::get_service_intra_process(uint64_t intra_process_service_id
   }
 }
 
-bool
-IntraProcessManager::service_is_available(uint64_t intra_process_client_id)
-{
-  std::shared_lock<std::shared_timed_mutex> lock(mutex_);
-
-  auto service_it = clients_to_services_.find(intra_process_client_id);
-
-  if (service_it != clients_to_services_.end()) {
-    // A server matching the client has been found
-    return true;
-  }
-  return false;
-}
-
 ClientIntraProcessBase::SharedPtr
 IntraProcessManager::get_client_intra_process(uint64_t intra_process_client_id)
 {
@@ -310,6 +440,73 @@ IntraProcessManager::get_client_intra_process(uint64_t intra_process_client_id)
       return nullptr;
     }
   }
+}
+
+ActionClientIntraProcessBase::SharedPtr
+IntraProcessManager::get_action_client_intra_process(
+  uint64_t intra_process_action_client_id)
+{
+  std::shared_lock<std::shared_timed_mutex> lock(mutex_);
+
+  auto client_it = action_clients_.find(intra_process_action_client_id);
+  if (client_it == action_clients_.end()) {
+    return nullptr;
+  } else {
+    auto client = client_it->second.lock();
+    if (client) {
+      return client;
+    } else {
+      action_clients_.erase(client_it);
+      return nullptr;
+    }
+  }
+}
+
+ActionServerIntraProcessBase::SharedPtr
+IntraProcessManager::get_action_server_intra_process(
+  uint64_t intra_process_action_server_id)
+{
+  std::shared_lock<std::shared_timed_mutex> lock(mutex_);
+
+  auto service_it = action_servers_.find(intra_process_action_server_id);
+  if (service_it == action_servers_.end()) {
+    return nullptr;
+  } else {
+    auto service = service_it->second.lock();
+    if (service) {
+      return service;
+    } else {
+      action_servers_.erase(service_it);
+      return nullptr;
+    }
+  }
+}
+
+bool
+IntraProcessManager::service_is_available(uint64_t intra_process_client_id)
+{
+  std::shared_lock<std::shared_timed_mutex> lock(mutex_);
+
+  auto service_it = clients_to_services_.find(intra_process_client_id);
+
+  if (service_it != clients_to_services_.end()) {
+    // A server matching the client has been found
+    return true;
+  }
+  return false;
+}
+
+bool
+IntraProcessManager::action_server_is_available(uint64_t ipc_action_client_id)
+{
+  std::shared_lock<std::shared_timed_mutex> lock(mutex_);
+  auto action_service_it = action_clients_to_servers_.find(ipc_action_client_id);
+
+  if (action_service_it != action_clients_to_servers_.end()) {
+    // An action server matching the action client has been found
+    return true;
+  }
+  return false;
 }
 
 uint64_t
@@ -372,6 +569,26 @@ IntraProcessManager::can_communicate(
 {
   // client and service must be under the same name
   if (strcmp(client->get_service_name(), service->get_service_name()) != 0) {
+    return false;
+  }
+
+  auto check_result = rclcpp::qos_check_compatible(
+    client->get_actual_qos(), service->get_actual_qos());
+
+  if (check_result.compatibility == rclcpp::QoSCompatibility::Error) {
+    return false;
+  }
+
+  return true;
+}
+
+bool
+IntraProcessManager::can_communicate(
+  ActionClientIntraProcessBase::SharedPtr client,
+  ActionServerIntraProcessBase::SharedPtr service) const
+{
+  // client and service must be under the same name
+  if (strcmp(client->get_action_name(), service->get_action_name()) != 0) {
     return false;
   }
 

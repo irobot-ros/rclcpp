@@ -686,4 +686,35 @@ ClientBase::execute(std::shared_ptr<void> & data)
   }
 }
 
+void
+ClientBase::setup_intra_process(
+  uint64_t ipc_action_client_id,
+  IntraProcessManagerWeakPtr weak_ipm)
+{
+  weak_ipm_ = weak_ipm;
+  use_intra_process_ = true;
+  ipc_action_client_id_ = ipc_action_client_id;
+}
+
+rclcpp::Waitable::SharedPtr
+ClientBase::get_intra_process_waitable()
+{
+  std::lock_guard<std::recursive_mutex> lock(ipc_mutex_);
+
+  // If not using intra process, shortcut to nullptr.
+  if (!use_intra_process_) {
+    return nullptr;
+  }
+  // Get the intra process manager.
+  auto ipm = weak_ipm_.lock();
+  if (!ipm) {
+    throw std::runtime_error(
+            "rclcpp_action::ClientBase::get_intra_process_waitable() called "
+            "after destruction of intra process manager");
+  }
+
+  // Use the id to retrieve the intra-process client from the intra-process manager.
+  return ipm->get_action_client_intra_process(ipc_action_client_id_);
+}
+
 }  // namespace rclcpp_action

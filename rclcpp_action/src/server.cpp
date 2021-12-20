@@ -352,36 +352,8 @@ ServerBase::execute_goal_request_received(std::shared_ptr<void> & data)
   // if goal is accepted, create a goal handle, and store it
   if (GoalResponse::ACCEPT_AND_EXECUTE == status || GoalResponse::ACCEPT_AND_DEFER == status) {
     RCLCPP_DEBUG(pimpl_->logger_, "Accepted goal %s", to_string(uuid).c_str());
-    // rcl_action will set time stamp
-    auto deleter = [](rcl_action_goal_handle_t * ptr)
-      {
-        if (nullptr != ptr) {
-          rcl_ret_t fail_ret = rcl_action_goal_handle_fini(ptr);
-          if (RCL_RET_OK != fail_ret) {
-            RCLCPP_DEBUG(
-              rclcpp::get_logger("rclcpp_action"),
-              "failed to fini rcl_action_goal_handle_t in deleter");
-          }
-          delete ptr;
-        }
-      };
-    rcl_action_goal_handle_t * rcl_handle;
-    {
-      std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
-      rcl_handle = rcl_action_accept_new_goal(pimpl_->action_server_.get(), &goal_info);
-    }
-    if (!rcl_handle) {
-      throw std::runtime_error("Failed to accept new goal\n");
-    }
 
-    std::shared_ptr<rcl_action_goal_handle_t> handle(new rcl_action_goal_handle_t, deleter);
-    // Copy out goal handle since action server storage disappears when it is fini'd
-    *handle = *rcl_handle;
-
-    {
-      std::lock_guard<std::recursive_mutex> lock(pimpl_->unordered_map_mutex_);
-      pimpl_->goal_handles_[uuid] = handle;
-    }
+    auto handle = get_rcl_action_goal_handle(goal_info, uuid);
 
     if (GoalResponse::ACCEPT_AND_EXECUTE == status) {
       // Change status to executing
@@ -399,30 +371,51 @@ ServerBase::execute_goal_request_received(std::shared_ptr<void> & data)
   data.reset();
 }
 
-void
-ServerBase::execute_cancel_request_received(std::shared_ptr<void> & data)
-{
-  auto shared_ptr = std::static_pointer_cast
-    <std::tuple<rcl_ret_t, std::shared_ptr<action_msgs::srv::CancelGoal::Request>,
-      rmw_request_id_t>>(data);
-  auto ret = std::get<0>(*shared_ptr);
-  if (RCL_RET_ACTION_SERVER_TAKE_FAILED == ret) {
-    // Ignore take failure because connext fails if it receives a sample without valid data.
-    // This happens when a client shuts down and connext receives a sample saying the client is
-    // no longer alive.
-    return;
-  } else if (RCL_RET_OK != ret) {
-    rclcpp::exceptions::throw_from_rcl_error(ret);
-  }
-  auto request = std::get<1>(*shared_ptr);
-  auto request_header = std::get<2>(*shared_ptr);
-  pimpl_->cancel_request_ready_ = false;
 
-  // Convert c++ message to C message
-  rcl_action_cancel_request_t cancel_request = rcl_action_get_zero_initialized_cancel_request();
-  convert(request->goal_info.goal_id.uuid, &cancel_request.goal_info);
-  cancel_request.goal_info.stamp.sec = request->goal_info.stamp.sec;
-  cancel_request.goal_info.stamp.nanosec = request->goal_info.stamp.nanosec;
+std::shared_ptr<rcl_action_goal_handle_t>
+ServerBase::get_rcl_action_goal_handle(
+  rcl_action_goal_info_t goal_info,
+  GoalUUID uuid)
+{
+  // This api is a workaround for IPC communication.
+  // The goal would be not use any rcl stuff.
+  auto deleter = [](rcl_action_goal_handle_t * ptr)
+    {
+      if (nullptr != ptr) {
+        rcl_ret_t fail_ret = rcl_action_goal_handle_fini(ptr);
+        if (RCL_RET_OK != fail_ret) {
+          RCLCPP_DEBUG(
+            rclcpp::get_logger("rclcpp_action"),
+            "failed to fini rcl_action_goal_handle_t in deleter");
+        }
+        delete ptr;
+      }
+    };
+  rcl_action_goal_handle_t * rcl_handle;
+  {
+    std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
+    rcl_handle = rcl_action_accept_new_goal(pimpl_->action_server_.get(), &goal_info);
+  }
+  if (!rcl_handle) {
+    throw std::runtime_error("Failed to accept new goal\n");
+  }
+
+  std::shared_ptr<rcl_action_goal_handle_t> handle(new rcl_action_goal_handle_t, deleter);
+  // Copy out goal handle since action server storage disappears when it is fini'd
+  *handle = *rcl_handle;
+
+  {
+    std::lock_guard<std::recursive_mutex> lock(pimpl_->unordered_map_mutex_);
+    pimpl_->goal_handles_[uuid] = handle;
+  }
+
+  return handle;
+}
+
+std::shared_ptr<action_msgs::srv::CancelGoal::Response>
+ServerBase::process_cancel_request(rcl_action_cancel_request_t & cancel_request)
+{
+  rcl_ret_t ret;
 
   // Get a list of goal info that should be attempted to be cancelled
   rcl_action_cancel_response_t cancel_response = rcl_action_get_zero_initialized_cancel_response();
@@ -471,6 +464,35 @@ ServerBase::execute_cancel_request_received(std::shared_ptr<void> & data)
   if (goals.size >= 1u && 0u == response->goals_canceling.size()) {
     response->return_code = action_msgs::srv::CancelGoal::Response::ERROR_REJECTED;
   }
+
+  return response;
+}
+
+void
+ServerBase::execute_cancel_request_received(std::shared_ptr<void> & data)
+{
+  auto shared_ptr = std::static_pointer_cast
+    <std::tuple<rcl_ret_t, std::shared_ptr<action_msgs::srv::CancelGoal::Request>,
+      rmw_request_id_t>>(data);
+  auto ret = std::get<0>(*shared_ptr);
+  if (RCL_RET_ACTION_SERVER_TAKE_FAILED == ret) {
+    // Ignore take failure because connext fails if it receives a sample without valid data.
+    // This happens when a client shuts down and connext receives a sample saying the client is
+    // no longer alive.
+    return;
+  } else if (RCL_RET_OK != ret) {
+    rclcpp::exceptions::throw_from_rcl_error(ret);
+  }
+  auto request = std::get<1>(*shared_ptr);
+  auto request_header = std::get<2>(*shared_ptr);
+
+  // Convert c++ message to C message
+  rcl_action_cancel_request_t cancel_request = rcl_action_get_zero_initialized_cancel_request();
+  convert(request->goal_info.goal_id.uuid, &cancel_request.goal_info);
+  cancel_request.goal_info.stamp.sec = request->goal_info.stamp.sec;
+  cancel_request.goal_info.stamp.nanosec = request->goal_info.stamp.nanosec;
+
+  auto response = process_cancel_request(cancel_request);
 
   if (!response->goals_canceling.empty()) {
     // at least one goal state changed, publish a new status message
@@ -545,6 +567,18 @@ ServerBase::execute_result_request_received(std::shared_ptr<void> & data)
   data.reset();
 }
 
+// Todo: Use an intra-process way to store goal_results, when using IPC
+std::shared_ptr<void>
+ServerBase::get_result_response(GoalUUID uuid)
+{
+  std::lock_guard<std::recursive_mutex> lock(pimpl_->unordered_map_mutex_);
+  auto iter = pimpl_->goal_results_.find(uuid);
+  if (iter != pimpl_->goal_results_.end()) {
+    return iter->second;
+  }
+  return nullptr;
+}
+
 void
 ServerBase::execute_check_expired_goals()
 {
@@ -574,11 +608,9 @@ ServerBase::execute_check_expired_goals()
   }
 }
 
-void
-ServerBase::publish_status()
+std::shared_ptr<action_msgs::msg::GoalStatusArray>
+ServerBase::get_status_array()
 {
-  rcl_ret_t ret;
-
   // We need to hold the lock across this entire method because
   // rcl_action_server_get_goal_handles() returns an internal pointer to the
   // goal data.
@@ -587,7 +619,7 @@ ServerBase::publish_status()
   // Get all goal handles known to C action server
   rcl_action_goal_handle_t ** goal_handles = NULL;
   size_t num_goals = 0;
-  ret = rcl_action_server_get_goal_handles(
+  rcl_ret_t ret = rcl_action_server_get_goal_handles(
     pimpl_->action_server_.get(), &goal_handles, &num_goals);
 
   if (RCL_RET_OK != ret) {
@@ -625,8 +657,16 @@ ServerBase::publish_status()
     status_msg->status_list.push_back(msg);
   }
 
+  return status_msg;
+}
+
+void
+ServerBase::publish_status()
+{
+  auto status_msg = get_status_array();
+
   // Publish the message through the status publisher
-  ret = rcl_action_publish_status(pimpl_->action_server_.get(), status_msg.get());
+  rcl_ret_t ret = rcl_action_publish_status(pimpl_->action_server_.get(), status_msg.get());
 
   if (RCL_RET_OK != ret) {
     rclcpp::exceptions::throw_from_rcl_error(ret);
@@ -832,4 +872,35 @@ ServerBase::clear_on_ready_callback()
   }
 
   entity_type_to_on_ready_callback_.clear();
+}
+
+void
+ServerBase::setup_intra_process(
+  uint64_t ipc_action_server_id,
+  IntraProcessManagerWeakPtr weak_ipm)
+{
+  weak_ipm_ = weak_ipm;
+  use_intra_process_ = true;
+  ipc_action_server_id_ = ipc_action_server_id;
+}
+
+rclcpp::Waitable::SharedPtr
+ServerBase::get_intra_process_waitable()
+{
+  std::lock_guard<std::recursive_mutex> lock(ipc_mutex_);
+
+  // If not using intra process, shortcut to nullptr.
+  if (!use_intra_process_) {
+    return nullptr;
+  }
+  // Get the intra process manager.
+  auto ipm = weak_ipm_.lock();
+  if (!ipm) {
+    throw std::runtime_error(
+            "rclcpp_action::ServerBase::get_intra_process_waitable() called "
+            "after destruction of intra process manager");
+  }
+
+  // Use the id to retrieve the intra-process client from the intra-process manager.
+  return ipm->get_action_server_intra_process(ipc_action_server_id_);
 }

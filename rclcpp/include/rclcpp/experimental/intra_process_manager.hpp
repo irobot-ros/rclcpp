@@ -28,6 +28,10 @@
 #include <typeinfo>
 
 #include "rclcpp/allocator/allocator_deleter.hpp"
+#include "rclcpp/experimental/action_client_intra_process.hpp"
+#include "rclcpp/experimental/action_client_intra_process_base.hpp"
+#include "rclcpp/experimental/action_server_intra_process.hpp"
+#include "rclcpp/experimental/action_server_intra_process_base.hpp"
 #include "rclcpp/experimental/client_intra_process.hpp"
 #include "rclcpp/experimental/client_intra_process_base.hpp"
 #include "rclcpp/experimental/ros_message_intra_process_buffer.hpp"
@@ -138,6 +142,28 @@ public:
   uint64_t
   add_intra_process_service(rclcpp::experimental::ServiceIntraProcessBase::SharedPtr service);
 
+  /// Register an intra-process action client with the manager,
+  /// returns the action client unique id.
+  /**
+   * \param client the ActionClientIntraProcessBase to register.
+   * \return an unsigned 64-bit integer which is the action client's unique id.
+   */
+  RCLCPP_PUBLIC
+  uint64_t
+  add_intra_process_action_client(
+    rclcpp::experimental::ActionClientIntraProcessBase::SharedPtr client);
+
+  /// Register an intra-process action service with the manager,
+  /// returns the action service unique id.
+  /**
+   * \param service the ActionServerIntraProcessBase to register.
+   * \return an unsigned 64-bit integer which is the action service's unique id.
+   */
+  RCLCPP_PUBLIC
+  uint64_t
+  add_intra_process_action_server(
+    rclcpp::experimental::ActionServerIntraProcessBase::SharedPtr service);
+
   /// Unregister a subscription using the subscription's unique id.
   /**
    * This method does not allocate memory.
@@ -164,6 +190,22 @@ public:
   void
   remove_service(uint64_t intra_process_service_id);
 
+  /// Unregister an action client using the action client's unique id.
+  /**
+   * \param ipc_action_client_id id of the client to remove.
+   */
+  RCLCPP_PUBLIC
+  void
+  remove_action_client(uint64_t ipc_action_client_id);
+
+  /// Unregister an action server using the action server's unique id.
+  /**
+   * \param ipc_action_server_id id of the service to remove.
+   */
+  RCLCPP_PUBLIC
+  void
+  remove_action_server(uint64_t ipc_action_server_id);
+
   /// Register a publisher with the manager, returns the publisher unique id.
   /**
    * This method stores the publisher intra process object, together with
@@ -187,6 +229,25 @@ public:
   RCLCPP_PUBLIC
   void
   remove_publisher(uint64_t intra_process_publisher_id);
+
+  // Store an intra-process action client ID along its current
+  // goal UUID, since later when the server process a request
+  // it'll use the goal UUID to retrieve the client which asked for
+  // the result.
+  RCLCPP_PUBLIC
+  void
+  store_intra_process_action_client_goal_uuid(
+    uint64_t ipc_action_client_id,
+    size_t uuid);
+
+  // Remove an action client goal UUID entry
+  RCLCPP_PUBLIC
+  void
+  remove_intra_process_action_client_goal_uuid(size_t uuid);
+
+  RCLCPP_PUBLIC
+  uint64_t
+  get_action_client_id_from_goal_uuid(size_t uuid);
 
   /// Publishes an intra-process message, passed as a unique pointer.
   /**
@@ -380,6 +441,275 @@ public:
     }
   }
 
+  /// Gets an ActionClientIntraProcess<ActionT> from its ID
+  /**
+   * Using the intra-process client id, gets the correspoding
+   * ActionClientIntraProcess<ActionT> if exists.
+   *
+   * \param ipc_action_client_id the id of the client
+   * \return and ActionClientIntraProcess<ActionT> or nullptr if no clients match the ID
+   */
+  template<typename ActionT>
+  std::shared_ptr<rclcpp::experimental::ActionClientIntraProcess<ActionT>>
+  get_intra_process_action_client(uint64_t ipc_action_client_id)
+  {
+    auto action_client = get_action_client_intra_process(ipc_action_client_id);
+
+    if (action_client) {
+      auto ipc_action_client = std::dynamic_pointer_cast<
+        rclcpp::experimental::ActionClientIntraProcess<ActionT>>(
+        action_client);
+      if (ipc_action_client) {
+        return ipc_action_client;
+      }
+    }
+
+    throw std::runtime_error("No action clients match the specified ID.");
+  }
+
+  /// Gets an ActionServerIntraProcess<ActionT> matching an intra-process action client ID
+  /**
+   * Using the intra-process client id, a matching intra-process action service is retrieved
+   * if exists.
+   *
+   * \param ipc_action_client_id the id of the client matching a server
+   * \return and ActionServerIntraProcess<ActionT> or nullptr if no servers match the client ID
+   */
+  template<typename ActionT>
+  std::shared_ptr<rclcpp::experimental::ActionServerIntraProcess<ActionT>>
+  get_matching_intra_process_action_server(uint64_t ipc_action_client_id)
+  {
+    auto action_client_it = action_clients_to_servers_.find(ipc_action_client_id);
+
+    if (action_client_it == action_clients_to_servers_.end()) {
+      throw std::runtime_error("No action clients match the specified ID.");
+    }
+
+    uint64_t action_service_id = action_client_it->second;
+
+    auto service_it = action_servers_.find(action_service_id);
+    if (service_it == action_servers_.end()) {
+      throw std::runtime_error(
+              "There are no servers matching the intra-process action client ID.");
+    }
+    auto action_server_intra_process_base = service_it->second.lock();
+    if (action_server_intra_process_base) {
+      auto ipc_action_service = std::dynamic_pointer_cast<
+        rclcpp::experimental::ActionServerIntraProcess<ActionT>>(
+        action_server_intra_process_base);
+      if (ipc_action_service) {
+        return ipc_action_service;
+      }
+    } else {
+      action_servers_.erase(service_it);
+    }
+
+    throw std::runtime_error("No action servers match the specified ID.");
+  }
+
+  /// Send an intra-process action client goal request
+  /**
+   * Using the intra-process action client id, a matching intra-process action
+   * server is retrieved which will store the goal request to process it asynchronously.
+   *
+   * \param ipc_action_client_id the id of the action client sending the goal request
+   * \param goal_request the action client's goal request data.
+   * \param callback the callback to be called when the server sends the goal response
+   */
+  template<typename ActionT, typename RequestT>
+  void
+  intra_process_action_send_goal_request(
+    uint64_t ipc_action_client_id,
+    RequestT goal_request,
+    std::function<void(std::shared_ptr<void>)> callback)
+  {
+    // First, lets store the client callback to be called when the
+    // server sends the goal response
+    auto client = get_intra_process_action_client<ActionT>(ipc_action_client_id);
+
+    if (client) {
+      client->store_goal_response_callback(callback);
+    }
+
+    // Now lets send the goal request
+    auto service = get_matching_intra_process_action_server<ActionT>(ipc_action_client_id);
+
+    if (service) {
+      service->store_ipc_action_goal_request(
+        ipc_action_client_id, std::move(goal_request));
+    }
+  }
+
+  /// Send an intra-process action client cancel request
+  /**
+   * Using the intra-process action client id, a matching intra-process action
+   * server is retrieved which will store the cancel request to process it asynchronously.
+   *
+   * \param ipc_action_client_id the id of the action client sending the cancel request
+   * \param cancel_request the action client's cancel request data.
+   * \param callback the callback to be called when the server sends the cancel response
+   */
+  template<typename ActionT, typename CancelT>
+  void
+  intra_process_action_send_cancel_request(
+    uint64_t ipc_action_client_id,
+    CancelT cancel_request,
+    std::function<void(std::shared_ptr<void>)> callback)
+  {
+    // First, lets store the client callback to be called when the
+    // server sends the cancel response
+    auto client = get_intra_process_action_client<ActionT>(ipc_action_client_id);
+
+    if (client) {
+      client->store_cancel_goal_callback(callback);
+    }
+
+    // Now lets send the cancel request
+    auto service = get_matching_intra_process_action_server<ActionT>(ipc_action_client_id);
+
+    if (service) {
+      service->store_ipc_action_cancel_request(
+        ipc_action_client_id, std::move(cancel_request));
+    }
+  }
+
+  /// Send an intra-process action client result request
+  /**
+   * Using the intra-process action client id, a matching intra-process action
+   * server is retrieved which will store the result request to process it asynchronously.
+   *
+   * \param ipc_action_client_id the id of the action client sending the result request
+   * \param result_request the action client's result request data.
+   */
+  template<typename ActionT, typename RequestT>
+  void
+  intra_process_action_send_result_request(
+    uint64_t ipc_action_client_id,
+    RequestT result_request,
+    std::function<void(std::shared_ptr<void>)> callback)
+  {
+    // First, lets store the client callback to be called when the
+    // server sends the result response
+    auto client = get_intra_process_action_client<ActionT>(ipc_action_client_id);
+
+    if (client) {
+      client->store_result_response_callback(callback);
+    }
+
+    // Now lets send the result request to the server
+    auto service = get_matching_intra_process_action_server<ActionT>(ipc_action_client_id);
+
+    if (service) {
+      service->store_ipc_action_result_request(
+        ipc_action_client_id, std::move(result_request));
+    }
+  }
+
+  /// Send an intra-process action server goal response
+  /**
+   * Using the intra-process action client id, an action client is found which
+   * will get the response of a goal request.
+   *
+   * \param ipc_action_client_id the id of the action client receiving the response
+   * \param goal_response the action server's goal response data.
+   */
+  template<typename ActionT, typename ResponseT>
+  void
+  intra_process_action_send_goal_response(
+    uint64_t ipc_action_client_id,
+    ResponseT goal_response)
+  {
+    auto client = get_intra_process_action_client<ActionT>(ipc_action_client_id);
+
+    if (client) {
+      client->store_ipc_action_goal_response(std::move(goal_response));
+    }
+  }
+
+  /// Send an intra-process action server cancel response
+  /**
+   * Using the intra-process action client id, an action client is found which
+   * will get the response of the cancel request.
+   *
+   * \param ipc_action_client_id the id of the action client receiving the response
+   * \param cancel_response the action server's cancel response data.
+   */
+  template<typename ActionT, typename ResponseT>
+  void
+  intra_process_action_send_cancel_response(
+    uint64_t ipc_action_client_id,
+    ResponseT cancel_response)
+  {
+    auto client = get_intra_process_action_client<ActionT>(ipc_action_client_id);
+
+    if (client) {
+      client->store_ipc_action_cancel_response(std::move(cancel_response));
+    }
+  }
+
+  /// Send an intra-process action server result response
+  /**
+   * Using the intra-process action client id, an action client is found which
+   * will get the response of a result request.
+   *
+   * \param ipc_action_client_id the id of the action client receiving the response
+   * \param result_response the action server's result response data.
+   */
+  template<typename ActionT, typename ResponseT>
+  void
+  intra_process_action_send_result_response(
+    uint64_t ipc_action_client_id,
+    ResponseT result_response)
+  {
+    auto client = get_intra_process_action_client<ActionT>(ipc_action_client_id);
+
+    if (client) {
+      client->store_ipc_action_result_response(std::move(result_response));
+    }
+  }
+
+  /// Intra-process publish an action goal status
+  /**
+   * Using the intra-process action client id, an action client is found which
+   * will get the goal status.
+   *
+   * \param ipc_action_client_id the id of the action client receiving the goal status
+   * \param status_msg the status of the goal, sent by the server
+   */
+  template<typename ActionT, typename StatusT>
+  void
+  intra_process_action_publish_status(
+    uint64_t ipc_action_client_id,
+    StatusT status_msg)
+  {
+    auto client = get_intra_process_action_client<ActionT>(ipc_action_client_id);
+
+    if (client) {
+      client->store_ipc_action_goal_status(std::move(status_msg));
+    }
+  }
+
+  /// Intra-process publish an action goal feedback
+  /**
+   * Using the intra-process action client id, an action client is found which
+   * will get the goal feedback.
+   *
+   * \param ipc_action_client_id the id of the action client receiving the goal status
+   * \param feedback the feedback of the goal, sent by the server
+   */
+  template<typename ActionT, typename FeedbackT>
+  void
+  intra_process_action_publish_feedback(
+    uint64_t ipc_action_client_id,
+    FeedbackT feedback)
+  {
+    auto client = get_intra_process_action_client<ActionT>(ipc_action_client_id);
+
+    if (client) {
+      client->store_ipc_action_feedback(std::move(feedback));
+    }
+  }
+
   /// Return true if the given rmw_gid_t matches any stored Publishers.
   RCLCPP_PUBLIC
   bool
@@ -406,6 +736,18 @@ public:
   bool
   service_is_available(uint64_t intra_process_client_id);
 
+  RCLCPP_PUBLIC
+  rclcpp::experimental::ActionClientIntraProcessBase::SharedPtr
+  get_action_client_intra_process(uint64_t intra_process_action_client_id);
+
+  RCLCPP_PUBLIC
+  rclcpp::experimental::ActionServerIntraProcessBase::SharedPtr
+  get_action_server_intra_process(uint64_t intra_process_action_server_id);
+
+  RCLCPP_PUBLIC
+  bool
+  action_server_is_available(uint64_t ipc_action_client_id);
+
 private:
   struct SplittedSubscriptions
   {
@@ -431,6 +773,15 @@ private:
   using ClientToServiceIdsMap =
     std::unordered_map<uint64_t, uint64_t>;
 
+  using ActionClientMap =
+    std::unordered_map<uint64_t, rclcpp::experimental::ActionClientIntraProcessBase::WeakPtr>;
+
+  using ActionServerMap =
+    std::unordered_map<uint64_t, rclcpp::experimental::ActionServerIntraProcessBase::WeakPtr>;
+
+  using ActionClientToServerIdsMap =
+    std::unordered_map<uint64_t, uint64_t>;
+
   RCLCPP_PUBLIC
   static
   uint64_t
@@ -451,6 +802,12 @@ private:
   can_communicate(
     rclcpp::experimental::ClientIntraProcessBase::SharedPtr client,
     rclcpp::experimental::ServiceIntraProcessBase::SharedPtr service) const;
+
+  RCLCPP_PUBLIC
+  bool
+  can_communicate(
+    rclcpp::experimental::ActionClientIntraProcessBase::SharedPtr client,
+    rclcpp::experimental::ActionServerIntraProcessBase::SharedPtr service) const;
 
   template<
     typename MessageT,
@@ -633,6 +990,11 @@ private:
   ClientToServiceIdsMap clients_to_services_;
   ClientMap clients_;
   ServiceMap services_;
+  ActionClientMap action_clients_;
+  ActionServerMap action_servers_;
+  ActionClientToServerIdsMap action_clients_to_servers_;
+
+  std::unordered_map<size_t, uint64_t> clients_uuid_to_id_;
 
   mutable std::shared_timed_mutex mutex_;
 };

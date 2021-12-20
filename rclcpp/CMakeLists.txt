@@ -36,6 +36,8 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 set(${PROJECT_NAME}_SRCS
+  src/rclcpp/action_client_intra_process_base.cpp
+  src/rclcpp/action_server_intra_process_base.cpp
   src/rclcpp/any_executable.cpp
   src/rclcpp/callback_group.cpp
   src/rclcpp/client.cpp
