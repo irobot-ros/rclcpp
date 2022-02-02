@@ -51,7 +51,7 @@ public:
   : gc_(context), topic_name_(topic_name), qos_profile_(qos_profile)
   {}
 
-  virtual ~SubscriptionIntraProcessBase() = default;
+  virtual ~SubscriptionIntraProcessBase();
 
   RCLCPP_PUBLIC
   size_t
