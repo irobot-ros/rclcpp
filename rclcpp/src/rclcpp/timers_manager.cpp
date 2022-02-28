@@ -165,6 +165,7 @@ void TimersManager::execute_ready_timer(const void * timer_id)
     ready_timer = weak_timers_heap_.get_timer(timer_id);
   }
   if (ready_timer) {
+    ready_timer->call();
     ready_timer->execute_callback();
   }
 }
