@@ -460,8 +460,7 @@ private:
      */
     static bool timer_greater(TimerPtr a, TimerPtr b)
     {
-      // FIXME!
-      return a->time_until_trigger() > b->time_until_trigger();
+      return a->next_call_time() >= b->next_call_time();
     }
 
     std::vector<TimerPtr> owned_heap_;

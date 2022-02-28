@@ -120,6 +120,15 @@ public:
   std::chrono::nanoseconds
   time_until_trigger();
 
+  /// Returns a time object indicating when the timer has its next scheduled callback.
+  /**
+   * \return A rclcpp::Time representing when the next callback should be executed.
+   * \throws std::runtime_error if the rcl_timer_get_next_call_time returns a failure
+   */
+  RCLCPP_PUBLIC
+  rclcpp::Time
+  next_call_time();
+
   /// Is the clock steady (i.e. is the time between ticks constant?)
   /** \return True if the clock used by this timer is steady. */
   virtual bool is_steady() = 0;
