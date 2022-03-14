@@ -39,11 +39,20 @@ int main(int argc, char * argv[])
   RCLCPP_DEBUG(logger, "Load library %s", library_name.c_str());
   auto loader = new class_loader::ClassLoader(library_name);
   auto classes = loader->getAvailableClasses<rclcpp_components::NodeFactory>();
-  for (auto clazz : classes) {
+  for (const auto & clazz : classes) {
     std::string name = clazz.c_str();
-    if (!(name.compare(class_name))) {
+    if (name.compare(class_name) == 0) {
       RCLCPP_DEBUG(logger, "Instantiate class %s", clazz.c_str());
-      auto node_factory = loader->createInstance<rclcpp_components::NodeFactory>(clazz);
+      std::shared_ptr<rclcpp_components::NodeFactory> node_factory = nullptr;
+      try {
+        node_factory = loader->createInstance<rclcpp_components::NodeFactory>(clazz);
+      } catch (const std::exception & ex) {
+        RCLCPP_ERROR(logger, "Failed to load library %s", ex.what());
+        return 1;
+      } catch (...) {
+        RCLCPP_ERROR(logger, "Failed to load library");
+        return 1;
+      }
       auto wrapper = node_factory->create_node_instance(options);
       auto node = wrapper.get_node_base_interface();
       node_wrappers.push_back(wrapper);

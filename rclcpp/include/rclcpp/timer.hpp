@@ -113,7 +113,8 @@ public:
 
   /// Check how long the timer has until its next scheduled callback.
   /**
-   * \return A std::chrono::duration representing the relative time until the next callback.
+   * \return A std::chrono::duration representing the relative time until the next callback
+   * or std::chrono::nanoseconds::max() if the timer is canceled.
    * \throws std::runtime_error if the rcl_timer_get_time_until_next_call returns a failure
    */
   RCLCPP_PUBLIC
@@ -148,11 +149,40 @@ public:
   bool
   exchange_in_use_by_wait_set_state(bool in_use_state);
 
+  /// Set a callback to be called when the timer is reset
+  /**
+   * You should aim to make this callback fast and not blocking.
+   * If you need to do a lot of work or wait for some other event, you should
+   * spin it off to another thread.
+   *
+   * Calling it again will override any previously set callback.
+   *
+   * This function is thread-safe.
+   *
+   * If you want more information available in the callback,
+   * you may use a lambda with captures or std::bind.
+   *
+   * \param[in] callback functor to be called whenever timer is reset
+   */
+  void
+  set_on_reset_callback(std::function<void()> callback);
+
+  /// Unset the callback registered for reset timer
+  void
+  clear_on_reset_callback();
+
 protected:
   Clock::SharedPtr clock_;
   std::shared_ptr<rcl_timer_t> timer_handle_;
 
   std::atomic<bool> in_use_by_wait_set_{false};
+
+  RCLCPP_PUBLIC
+  void
+  set_on_reset_callback(rcl_event_callback_t callback, const void * user_data);
+
+  std::recursive_mutex callback_mutex_;
+  std::function<void(size_t)> on_reset_callback_{nullptr};
 };
 
 

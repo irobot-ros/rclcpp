@@ -27,6 +27,7 @@
 
 #include "action_msgs/msg/goal_status_array.hpp"
 #include "action_msgs/srv/cancel_goal.hpp"
+#include "rclcpp/create_timer.hpp"
 #include "rclcpp/exceptions.hpp"
 #include "rclcpp_action/server.hpp"
 
@@ -83,6 +84,7 @@ ServerBase::ServerBase(
   rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base,
   rclcpp::node_interfaces::NodeClockInterface::SharedPtr node_clock,
   rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr node_logging,
+  rclcpp::node_interfaces::NodeTimersInterface::SharedPtr node_timers,
   const std::string & name,
   const rosidl_action_type_support_t * type_support,
   const rcl_action_server_options_t & options
@@ -110,8 +112,28 @@ ServerBase::ServerBase(
   rcl_node_t * rcl_node = node_base->get_rcl_node_handle();
   rcl_clock_t * rcl_clock = pimpl_->clock_->get_clock_handle();
 
+  timer_ = create_timer(
+    node_base,
+    node_timers,
+    node_clock->get_clock(),
+    rclcpp::Duration(std::chrono::nanoseconds(options.result_timeout.nanoseconds)),
+    [this]() {
+      std::lock_guard<std::recursive_mutex> lock(callbacks_mutex_);
+      std::cout << "if (timer_expired_callback_)" << std::endl;
+      if (timer_expired_callback_) {
+        std::cout << "calling timer_expired_callback_" << std::endl;
+        timer_expired_callback_(1);
+      }
+    });
+
   rcl_ret_t ret = rcl_action_server_init(
-    pimpl_->action_server_.get(), rcl_node, rcl_clock, type_support, name.c_str(), &options);
+    pimpl_->action_server_.get(),
+    rcl_node,
+    rcl_clock,
+    type_support,
+    name.c_str(),
+    &options,
+    timer_->get_timer_handle().get());
 
   if (RCL_RET_OK != ret) {
     rclcpp::exceptions::throw_from_rcl_error(ret);
@@ -232,6 +254,12 @@ ServerBase::take_data_by_entity_id(int id)
     case EntityType::CancelService:
       {
         pimpl_->cancel_request_ready_ = true;
+        break;
+      }
+
+    case EntityType::ExpireTimer:
+      {
+        pimpl_->goal_expired_ = true;
         break;
       }
 
@@ -565,6 +593,7 @@ ServerBase::execute_check_expired_goals()
   // Allocate expecting only one goal to expire at a time
   rcl_action_goal_info_t expired_goals[1];
   size_t num_expired = 1;
+  std::cout << "execute_check_expired_goals" << std::endl;
 
   // Loop in case more than 1 goal expired
   while (num_expired > 0u) {
@@ -586,6 +615,8 @@ ServerBase::execute_check_expired_goals()
       pimpl_->goal_handles_.erase(uuid);
     }
   }
+
+  pimpl_->goal_expired_ = false;
 }
 
 void
@@ -725,6 +756,7 @@ ServerBase::set_on_ready_callback(std::function<void(size_t, int)> callback)
   set_callback_to_entity(EntityType::GoalService, callback);
   set_callback_to_entity(EntityType::ResultService, callback);
   set_callback_to_entity(EntityType::CancelService, callback);
+  set_callback_to_entity(EntityType::ExpireTimer, callback);
 }
 
 void
@@ -753,6 +785,11 @@ ServerBase::set_callback_to_entity(
       }
     };
 
+  if (entity_type == EntityType::ExpireTimer) {
+    std::lock_guard<std::recursive_mutex> lock(callbacks_mutex_);
+    timer_expired_callback_ = new_callback;
+    return;
+  }
 
   // Set it temporarily to the new callback, while we replace the old one.
   // This two-step setting, prevents a gap where the old std::function has
@@ -762,7 +799,7 @@ ServerBase::set_callback_to_entity(
     rclcpp::detail::cpp_callback_trampoline<const void *, size_t>,
     static_cast<const void *>(&new_callback));
 
-  std::lock_guard<std::recursive_mutex> lock(listener_mutex_);
+  std::lock_guard<std::recursive_mutex> lock(callbacks_mutex_);
   // Store the std::function to keep it in scope, also overwrites the existing one.
   auto it = entity_type_to_on_ready_callback_.find(entity_type);
 
@@ -836,12 +873,13 @@ ServerBase::set_on_ready_callback(
 void
 ServerBase::clear_on_ready_callback()
 {
-  std::lock_guard<std::recursive_mutex> lock(listener_mutex_);
+  std::lock_guard<std::recursive_mutex> lock(callbacks_mutex_);
 
   if (on_ready_callback_set_) {
     set_on_ready_callback(EntityType::GoalService, nullptr, nullptr);
     set_on_ready_callback(EntityType::ResultService, nullptr, nullptr);
     set_on_ready_callback(EntityType::CancelService, nullptr, nullptr);
+    timer_expired_callback_ = nullptr;
     on_ready_callback_set_ = false;
   }
 

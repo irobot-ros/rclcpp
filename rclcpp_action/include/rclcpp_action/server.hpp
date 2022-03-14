@@ -77,6 +77,7 @@ public:
     GoalService,
     ResultService,
     CancelService,
+    ExpireTimer,
   };
 
   RCLCPP_ACTION_PUBLIC
@@ -183,6 +184,7 @@ protected:
     rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base,
     rclcpp::node_interfaces::NodeClockInterface::SharedPtr node_clock,
     rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr node_logging,
+    rclcpp::node_interfaces::NodeTimersInterface::SharedPtr node_timers,
     const std::string & name,
     const rosidl_action_type_support_t * type_support,
     const rcl_action_server_options_t & options);
@@ -312,9 +314,12 @@ private:
 
 protected:
   // Mutex to protect the callbacks storage.
-  std::recursive_mutex listener_mutex_;
+  std::recursive_mutex callbacks_mutex_;
   // Storage for std::function callbacks to keep them in scope
   std::unordered_map<EntityType, std::function<void(size_t)>> entity_type_to_on_ready_callback_;
+  // Timer for expiring goals
+  rclcpp::TimerBase::SharedPtr timer_;
+  std::function<void(size_t)> timer_expired_callback_{nullptr};
 
   /// Set a callback to be called when the specified entity is ready
   RCLCPP_ACTION_PUBLIC
@@ -381,6 +386,7 @@ public:
     rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base,
     rclcpp::node_interfaces::NodeClockInterface::SharedPtr node_clock,
     rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr node_logging,
+    rclcpp::node_interfaces::NodeTimersInterface::SharedPtr node_timers,
     const std::string & name,
     const rcl_action_server_options_t & options,
     GoalCallback handle_goal,
@@ -391,6 +397,7 @@ public:
       node_base,
       node_clock,
       node_logging,
+      node_timers,
       name,
       rosidl_typesupport_cpp::get_action_type_support_handle<ActionT>(),
       options),
