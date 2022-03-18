@@ -258,6 +258,7 @@ public:
    * \param[in] service_name The topic to service on.
    * \param[in] qos_profile rmw_qos_profile_t Quality of service profile for client.
    * \param[in] group Callback group to call the service.
+   * \param[in] ipc_setting Intra-process communication setting for the client.
    * \return Shared pointer to the created client.
    * \deprecated use rclcpp::QoS instead of rmw_qos_profile_t
    */
@@ -281,7 +282,8 @@ public:
   create_client(
     const std::string & service_name,
     const rclcpp::QoS & qos = rclcpp::ServicesQoS(),
-    rclcpp::CallbackGroup::SharedPtr group = nullptr);
+    rclcpp::CallbackGroup::SharedPtr group = nullptr,
+    rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::NodeDefault);
 
   /// Create and return a Service.
   /**
@@ -289,6 +291,7 @@ public:
    * \param[in] callback User-defined callback function.
    * \param[in] qos_profile rmw_qos_profile_t Quality of service profile for client.
    * \param[in] group Callback group to call the service.
+   * \param[in] ipc_setting Intra-process communication setting for the service.
    * \return Shared pointer to the created service.
    * \deprecated use rclcpp::QoS instead of rmw_qos_profile_t
    */
@@ -315,7 +318,8 @@ public:
     const std::string & service_name,
     CallbackT && callback,
     const rclcpp::QoS & qos = rclcpp::ServicesQoS(),
-    rclcpp::CallbackGroup::SharedPtr group = nullptr);
+    rclcpp::CallbackGroup::SharedPtr group = nullptr,
+    rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::NodeDefault);
 
   /// Create and return a GenericPublisher.
   /**
