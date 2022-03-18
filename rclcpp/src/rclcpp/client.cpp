@@ -239,6 +239,37 @@ ClientBase::get_response_subscription_actual_qos() const
 }
 
 void
+ClientBase::setup_intra_process(
+  uint64_t intra_process_client_id,
+  IntraProcessManagerWeakPtr weak_ipm)
+{
+  std::lock_guard<std::recursive_mutex> lock(ipc_mutex_);
+  weak_ipm_ = weak_ipm;
+  use_intra_process_ = true;
+  intra_process_client_id_ = intra_process_client_id;
+}
+
+rclcpp::Waitable::SharedPtr
+ClientBase::get_intra_process_waitable()
+{
+  std::lock_guard<std::recursive_mutex> lock(ipc_mutex_);
+  // If not using intra process, shortcut to nullptr.
+  if (!use_intra_process_) {
+    return nullptr;
+  }
+  // Get the intra process manager.
+  auto ipm = weak_ipm_.lock();
+  if (!ipm) {
+    throw std::runtime_error(
+            "ClientBase::get_intra_process_waitable() called "
+            "after destruction of intra process manager");
+  }
+
+  // Use the id to retrieve the intra-process client from the intra-process manager.
+  return ipm->get_client_intra_process(intra_process_client_id_);
+}
+
+void
 ClientBase::set_on_new_response_callback(rcl_event_callback_t callback, const void * user_data)
 {
   rcl_ret_t ret = rcl_client_set_on_new_response_callback(

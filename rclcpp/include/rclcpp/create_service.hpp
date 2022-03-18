@@ -46,11 +46,12 @@ create_service(
   const std::string & service_name,
   CallbackT && callback,
   const rclcpp::QoS & qos,
-  rclcpp::CallbackGroup::SharedPtr group)
+  rclcpp::CallbackGroup::SharedPtr group,
+  rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::NodeDefault)
 {
   return create_service<ServiceT, CallbackT>(
     node_base, node_services, service_name,
-    std::forward<CallbackT>(callback), qos.get_rmw_qos_profile(), group);
+    std::forward<CallbackT>(callback), qos.get_rmw_qos_profile(), group, ipc_setting);
 }
 
 /// Create a service with a given type.
@@ -63,7 +64,8 @@ create_service(
   const std::string & service_name,
   CallbackT && callback,
   const rmw_qos_profile_t & qos_profile,
-  rclcpp::CallbackGroup::SharedPtr group)
+  rclcpp::CallbackGroup::SharedPtr group,
+  rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::NodeDefault)
 {
   rclcpp::AnyServiceCallback<ServiceT> any_service_callback;
   any_service_callback.set(std::forward<CallbackT>(callback));
@@ -72,8 +74,8 @@ create_service(
   service_options.qos = qos_profile;
 
   auto serv = Service<ServiceT>::make_shared(
-    node_base->get_shared_rcl_node_handle(),
-    service_name, any_service_callback, service_options);
+    node_base,
+    service_name, any_service_callback, service_options, ipc_setting);
   auto serv_base_ptr = std::dynamic_pointer_cast<ServiceBase>(serv);
   node_services->add_service(serv_base_ptr, group);
   return serv;

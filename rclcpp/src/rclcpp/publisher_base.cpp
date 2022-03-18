@@ -273,7 +273,7 @@ PublisherBase::get_non_local_subscription_count() const
     }
   }
   if (RCL_RET_OK != status) {
-    rclcpp::exceptions::throw_from_rcl_error(status, 
+    rclcpp::exceptions::throw_from_rcl_error(status,
       "failed to get get non local subscription count");
   }
   return inter_process_non_local_subscription_count;

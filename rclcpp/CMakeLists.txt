@@ -42,6 +42,7 @@ set(${PROJECT_NAME}_SRCS
   src/rclcpp/any_executable.cpp
   src/rclcpp/callback_group.cpp
   src/rclcpp/client.cpp
+  src/rclcpp/client_intra_process_base.cpp
   src/rclcpp/clock.cpp
   src/rclcpp/context.cpp
   src/rclcpp/contexts/default_context.cpp
@@ -116,6 +117,7 @@ set(${PROJECT_NAME}_SRCS
   src/rclcpp/serialization.cpp
   src/rclcpp/serialized_message.cpp
   src/rclcpp/service.cpp
+  src/rclcpp/service_intra_process_base.cpp
   src/rclcpp/signal_handler.cpp
   src/rclcpp/subscription_base.cpp
   src/rclcpp/subscription_intra_process_base.cpp

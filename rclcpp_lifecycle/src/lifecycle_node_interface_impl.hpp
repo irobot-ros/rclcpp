@@ -30,6 +30,7 @@
 
 #include "rcl_lifecycle/rcl_lifecycle.h"
 
+#include "rclcpp/intra_process_setting.hpp"
 #include "rclcpp/macros.hpp"
 #include "rclcpp/node_interfaces/node_base_interface.hpp"
 #include "rclcpp/node_interfaces/node_logging_interface.hpp"
