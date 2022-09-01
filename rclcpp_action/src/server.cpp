@@ -131,7 +131,6 @@ ServerBase::ServerBase(
 
 ServerBase::~ServerBase()
 {
-  clear_on_ready_callback();
 }
 
 size_t
