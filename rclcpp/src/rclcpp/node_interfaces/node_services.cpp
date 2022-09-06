@@ -35,9 +35,8 @@ NodeServices::add_service(
       // TODO(jacquelinekay): use custom exception
       throw std::runtime_error("Cannot create service, group not in node.");
     }
-    group->add_service(service_base_ptr);
   } else {
-    node_base_->get_default_callback_group()->add_service(service_base_ptr);
+    group = node_base_->get_default_callback_group();
   }
 
   auto service_intra_process_waitable = service_base_ptr->get_intra_process_waitable();
@@ -45,11 +44,15 @@ NodeServices::add_service(
     // Add to the callback group to be notified about intra-process msgs.
     node_base_->get_default_callback_group()->add_waitable(service_intra_process_waitable);
   }
+  group->add_service(service_base_ptr);
 
   // Notify the executor that a new service was created using the parent Node.
   auto & node_gc = node_base_->get_notify_guard_condition();
   try {
     node_gc.trigger();
+    if (auto callback_group_gc = group->get_notify_guard_condition()) {
+      callback_group_gc->trigger();
+    }
   } catch (const rclcpp::exceptions::RCLError & ex) {
     throw std::runtime_error(
             std::string("failed to notify wait set on service creation: ") + ex.what());
@@ -66,9 +69,8 @@ NodeServices::add_client(
       // TODO(jacquelinekay): use custom exception
       throw std::runtime_error("Cannot create client, group not in node.");
     }
-    group->add_client(client_base_ptr);
   } else {
-    node_base_->get_default_callback_group()->add_client(client_base_ptr);
+    group = node_base_->get_default_callback_group();
   }
 
   auto client_intra_process_waitable = client_base_ptr->get_intra_process_waitable();
@@ -76,11 +78,15 @@ NodeServices::add_client(
     // Add to the callback group to be notified about intra-process msgs.
     node_base_->get_default_callback_group()->add_waitable(client_intra_process_waitable);
   }
+  group->add_client(client_base_ptr);
 
   // Notify the executor that a new client was created using the parent Node.
   auto & node_gc = node_base_->get_notify_guard_condition();
   try {
     node_gc.trigger();
+    if (auto callback_group_gc = group->get_notify_guard_condition()) {
+      callback_group_gc->trigger();
+    }
   } catch (const rclcpp::exceptions::RCLError & ex) {
     throw std::runtime_error(
             std::string("failed to notify wait set on client creation: ") + ex.what());

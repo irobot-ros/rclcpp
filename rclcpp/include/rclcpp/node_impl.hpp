@@ -124,6 +124,24 @@ template<typename ServiceT>
 typename Client<ServiceT>::SharedPtr
 Node::create_client(
   const std::string & service_name,
+  const rclcpp::QoS & qos,
+  rclcpp::CallbackGroup::SharedPtr group,
+  rclcpp::IntraProcessSetting ipc_setting)
+{
+  return rclcpp::create_client<ServiceT>(
+    node_base_,
+    node_graph_,
+    node_services_,
+    extend_name_with_sub_namespace(service_name, this->get_sub_namespace()),
+    qos,
+    group,
+    ipc_setting);
+}
+
+template<typename ServiceT>
+typename Client<ServiceT>::SharedPtr
+Node::create_client(
+  const std::string & service_name,
   const rmw_qos_profile_t & qos_profile,
   rclcpp::CallbackGroup::SharedPtr group,
   rclcpp::IntraProcessSetting ipc_setting)
@@ -134,6 +152,25 @@ Node::create_client(
     node_services_,
     extend_name_with_sub_namespace(service_name, this->get_sub_namespace()),
     qos_profile,
+    group,
+    ipc_setting);
+}
+
+template<typename ServiceT, typename CallbackT>
+typename rclcpp::Service<ServiceT>::SharedPtr
+Node::create_service(
+  const std::string & service_name,
+  CallbackT && callback,
+  const rclcpp::QoS & qos,
+  rclcpp::CallbackGroup::SharedPtr group,
+  rclcpp::IntraProcessSetting ipc_setting)
+{
+  return rclcpp::create_service<ServiceT, CallbackT>(
+    node_base_,
+    node_services_,
+    extend_name_with_sub_namespace(service_name, this->get_sub_namespace()),
+    std::forward<CallbackT>(callback),
+    qos,
     group,
     ipc_setting);
 }

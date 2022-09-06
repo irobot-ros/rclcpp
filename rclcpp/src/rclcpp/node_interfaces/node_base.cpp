@@ -37,12 +37,13 @@ NodeBase::NodeBase(
   rclcpp::Context::SharedPtr context,
   const rcl_node_options_t & rcl_node_options,
   bool use_intra_process_default,
-  bool enable_topic_statistics_default)
+  bool enable_topic_statistics_default,
+  rclcpp::CallbackGroup::SharedPtr default_callback_group)
 : context_(context),
   use_intra_process_default_(use_intra_process_default),
   enable_topic_statistics_default_(enable_topic_statistics_default),
   node_handle_(nullptr),
-  default_callback_group_(nullptr),
+  default_callback_group_(default_callback_group),
   associated_with_executor_(false),
   notify_guard_condition_(context),
   notify_guard_condition_is_valid_(false)
@@ -128,9 +129,12 @@ NodeBase::NodeBase(
       delete node;
     });
 
-  // Create the default callback group.
-  using rclcpp::CallbackGroupType;
-  default_callback_group_ = create_callback_group(CallbackGroupType::MutuallyExclusive);
+  // Create the default callback group, if needed.
+  if (nullptr == default_callback_group_) {
+    using rclcpp::CallbackGroupType;
+    default_callback_group_ =
+      NodeBase::create_callback_group(CallbackGroupType::MutuallyExclusive);
+  }
 
   // Indicate the notify_guard_condition is now valid.
   notify_guard_condition_is_valid_ = true;
@@ -142,6 +146,15 @@ NodeBase::~NodeBase()
   {
     std::lock_guard<std::recursive_mutex> notify_condition_lock(notify_guard_condition_mutex_);
     notify_guard_condition_is_valid_ = false;
+  }
+
+  std::lock_guard<std::mutex> lock(callback_groups_mutex_);
+  for (auto & weak_gc : this->callback_groups_) {
+    if (auto strong_gc = weak_gc.lock()) {
+      if (auto callback_group_gc = strong_gc->get_notify_guard_condition()) {
+        callback_group_gc->trigger();
+      }
+    }
   }
 }
 
