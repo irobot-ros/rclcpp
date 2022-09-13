@@ -15,18 +15,18 @@
 #ifndef RCLCPP_ACTION__SERVER_HPP_
 #define RCLCPP_ACTION__SERVER_HPP_
 
-// Check what I need
-#include <action_msgs/msg/goal_status_array.hpp>
-#include <action_msgs/srv/cancel_goal.hpp>
-#include <rclcpp/experimental/action_server_intra_process.hpp>
-#include <rclcpp/intra_process_setting.hpp>
-
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <unordered_map>
 #include <utility>
+
+// Check what I need
+#include <action_msgs/msg/goal_status_array.hpp>
+#include <action_msgs/srv/cancel_goal.hpp>
+#include <rclcpp/experimental/action_server_intra_process.hpp>
+#include <rclcpp/intra_process_setting.hpp>
 
 #include "rcl/event_callback.h"
 #include "rcl_action/action_server.h"
@@ -481,7 +481,6 @@ public:
   virtual ~Server() = default;
 
 protected:
-
   // Intra-process version of execute_goal_request_received_
   // Missing: Deep comparison of functionality betwen IPC on/off
   void

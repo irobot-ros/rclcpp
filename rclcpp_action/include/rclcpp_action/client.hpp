@@ -15,10 +15,6 @@
 #ifndef RCLCPP_ACTION__CLIENT_HPP_
 #define RCLCPP_ACTION__CLIENT_HPP_
 
-// Check if I need all of following
-#include <rclcpp/experimental/action_client_intra_process.hpp>
-#include <rclcpp/experimental/intra_process_manager.hpp>
-#include <rclcpp/intra_process_setting.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -32,6 +28,11 @@
 #include <utility>
 
 #include "rcl/event_callback.h"
+
+// Check if I need all of following
+#include <rclcpp/experimental/action_client_intra_process.hpp>
+#include <rclcpp/experimental/intra_process_manager.hpp>
+#include <rclcpp/intra_process_setting.hpp>
 
 #include "rclcpp/exceptions.hpp"
 #include "rclcpp/macros.hpp"
