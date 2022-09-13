@@ -116,6 +116,7 @@ public:
       std::make_pair(ipc_action_client_id, std::move(goal_request)));
     gc_.trigger();
     goal_request_ready_ = true;
+    invoke_on_ready_callback(EventType::GoalRequest);
   }
 
   void store_ipc_action_result_request(
@@ -126,6 +127,7 @@ public:
       std::make_pair(ipc_action_client_id, std::move(result_request)));
     gc_.trigger();
     result_request_ready_ = true;
+    invoke_on_ready_callback(EventType::ResultRequest);
   }
 
   void store_ipc_action_cancel_request(
@@ -136,6 +138,7 @@ public:
       std::make_pair(ipc_action_client_id, std::move(cancel_request)));
     gc_.trigger();
     cancel_request_ready_ = true;
+    invoke_on_ready_callback(EventType::CancelGoal);
   }
 
   std::shared_ptr<void>
@@ -159,6 +162,25 @@ public:
       throw std::runtime_error("Taking data from action server but nothing is ready");
     }
     return nullptr;
+  }
+
+  std::shared_ptr<void>
+  take_data_by_entity_id(size_t id) override
+  {
+    // Mark as ready the event type from which we want to take data
+    switch (static_cast<EventType>(id)) {
+      case EventType::GoalRequest:
+        goal_request_ready_ = true;
+        break;
+      case EventType::CancelGoal:
+        cancel_request_ready_ = true;
+        break;
+      case EventType::ResultRequest:
+        result_request_ready_ = true;
+        break;
+    }
+
+    return take_data();
   }
 
   void execute(std::shared_ptr<void> & data)

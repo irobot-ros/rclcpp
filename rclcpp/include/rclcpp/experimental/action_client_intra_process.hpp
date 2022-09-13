@@ -131,6 +131,7 @@ public:
     goal_response_buffer_->add(std::move(goal_response));
     gc_.trigger();
     is_goal_response_ready_ = true;
+    invoke_on_ready_callback(EventType::GoalResponse);
   }
 
   void store_ipc_action_result_response(ResultResponseSharedPtr result_response)
@@ -138,6 +139,7 @@ public:
     result_response_buffer_->add(std::move(result_response));
     gc_.trigger();
     is_result_response_ready_ = true;
+    invoke_on_ready_callback(EventType::ResultResponse);
   }
 
   void store_ipc_action_cancel_response(CancelGoalSharedPtr cancel_response)
@@ -145,6 +147,7 @@ public:
     cancel_response_buffer_->add(std::move(cancel_response));
     gc_.trigger();
     is_cancel_response_ready_ = true;
+    invoke_on_ready_callback(EventType::CancelResponse);
   }
 
   void store_ipc_action_feedback(FeedbackSharedPtr feedback)
@@ -152,6 +155,7 @@ public:
     feedback_buffer_->add(std::move(feedback));
     gc_.trigger();
     is_feedback_ready_ = true;
+    invoke_on_ready_callback(EventType::FeedbackReady);
   }
 
   void store_ipc_action_goal_status(GoalStatusSharedPtr status)
@@ -159,6 +163,7 @@ public:
     status_buffer_->add(std::move(status));
     gc_.trigger();
     is_status_ready_ = true;
+    invoke_on_ready_callback(EventType::StatusReady);
   }
 
   std::shared_ptr<void>
@@ -183,6 +188,32 @@ public:
       throw std::runtime_error("Taking data from intra-process action client but nothing is ready");
     }
   }
+
+  std::shared_ptr<void>
+  take_data_by_entity_id(size_t id) override
+  {
+    // Mark as ready the event type from which we want to take data
+    switch (static_cast<EventType>(id)) {
+      case EventType::ResultResponse:
+        is_result_response_ready_ = true;
+        break;
+      case EventType::CancelResponse:
+        is_cancel_response_ready_ = true;
+        break;
+      case EventType::GoalResponse:
+        is_goal_response_ready_ = true;
+        break;
+      case EventType::FeedbackReady:
+        is_feedback_ready_ = true;
+        break;
+      case EventType::StatusReady:
+        is_status_ready_ = true;
+        break;
+    }
+
+    return take_data();
+  }
+
 
   void execute(std::shared_ptr<void> & data)
   {
