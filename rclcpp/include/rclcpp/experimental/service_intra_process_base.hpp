@@ -60,18 +60,18 @@ public:
 
   RCLCPP_PUBLIC
   size_t
-  get_number_of_ready_guard_conditions() {return 1;}
+  get_number_of_ready_guard_conditions() override {return 1;}
 
   RCLCPP_PUBLIC
   void
-  add_to_wait_set(rcl_wait_set_t * wait_set);
+  add_to_wait_set(rcl_wait_set_t * wait_set) override;
 
   virtual bool
-  is_ready(rcl_wait_set_t * wait_set) = 0;
+  is_ready(rcl_wait_set_t * wait_set) override = 0;
 
   virtual
   std::shared_ptr<void>
-  take_data() = 0;
+  take_data() override = 0;
 
   std::shared_ptr<void>
   take_data_by_entity_id(size_t id) override
@@ -81,7 +81,7 @@ public:
   }
 
   virtual void
-  execute(std::shared_ptr<void> & data) = 0;
+  execute(std::shared_ptr<void> & data) override = 0;
 
   RCLCPP_PUBLIC
   const char *
