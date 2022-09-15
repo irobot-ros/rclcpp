@@ -195,7 +195,7 @@ public:
   rclcpp::Waitable::SharedPtr
   get_intra_process_waitable();
 
-  protected:
+protected:
   RCLCPP_ACTION_PUBLIC
   ClientBase(
     rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base,
@@ -316,7 +316,7 @@ public:
   setup_intra_process(
     uint64_t ipc_action_client_id,
     IntraProcessManagerWeakPtr weak_ipm);
- 
+
   // End API for communication between ClientBase and Client<>
   // ---------------------------------------------------------
 
@@ -508,36 +508,36 @@ public:
         }
       };
 
-      bool intra_process_send_done = false;
-  
-      std::lock_guard<std::recursive_mutex> lock(ipc_mutex_);
-  
-      if (use_intra_process_) {
-        auto ipm = weak_ipm_.lock();
-        if (!ipm) {
-          throw std::runtime_error(
+    bool intra_process_send_done = false;
+
+    std::lock_guard<std::recursive_mutex> lock(ipc_mutex_);
+
+    if (use_intra_process_) {
+      auto ipm = weak_ipm_.lock();
+      if (!ipm) {
+        throw std::runtime_error(
                   "intra process send goal called after destruction of intra process manager");
-        }
-        bool intra_process_server_available = ipm->action_server_is_available(ipc_action_client_id_);
-  
+      }
+      bool intra_process_server_available = ipm->action_server_is_available(ipc_action_client_id_);
+
         // Check if there's an intra-process action server available matching this client.
         // If there's not, we fall back into inter-process communication, since
         // the server might be available in another process or was configured to not use IPC.
-        if (intra_process_server_available) {
-          ipm->intra_process_action_send_goal_request<ActionT>(
+      if (intra_process_server_available) {
+        ipm->intra_process_action_send_goal_request<ActionT>(
             ipc_action_client_id_,
             std::move(goal_request),
             callback);
-          intra_process_send_done = true;
-        }
+        intra_process_send_done = true;
       }
-  
-      if (!intra_process_send_done) {
+    }
+
+    if (!intra_process_send_done) {
         // Send inter-process goal request
-        this->send_goal_request(
+      this->send_goal_request(
           std::static_pointer_cast<void>(goal_request),
           callback);
-      }
+    }
 
     // TODO(jacobperron): Encapsulate into it's own function and
     //                    consider exposing an option to disable this cleanup
@@ -848,53 +848,53 @@ private:
     // The client callback to be called when server calculates the result, using the server
     // response as argument.
     auto callback =
-        [goal_handle, this](std::shared_ptr<void> response) mutable
-        {
+      [goal_handle, this](std::shared_ptr<void> response) mutable
+      {
           // Wrap the response in a struct with the fields a user cares about
-          WrappedResult wrapped_result;
-          using GoalResultResponse = typename ActionT::Impl::GetResultService::Response;
-          auto result_response = std::static_pointer_cast<GoalResultResponse>(response);
-          wrapped_result.result = std::make_shared<typename ActionT::Result>();
-          *wrapped_result.result = result_response->result;
-          wrapped_result.goal_id = goal_handle->get_goal_id();
-          wrapped_result.code = static_cast<ResultCode>(result_response->status);
-          goal_handle->set_result(wrapped_result);
-          std::lock_guard<std::recursive_mutex> lock(goal_handles_mutex_);
-          goal_handles_.erase(goal_handle->get_goal_id());
-        };
+        WrappedResult wrapped_result;
+        using GoalResultResponse = typename ActionT::Impl::GetResultService::Response;
+        auto result_response = std::static_pointer_cast<GoalResultResponse>(response);
+        wrapped_result.result = std::make_shared<typename ActionT::Result>();
+        *wrapped_result.result = result_response->result;
+        wrapped_result.goal_id = goal_handle->get_goal_id();
+        wrapped_result.code = static_cast<ResultCode>(result_response->status);
+        goal_handle->set_result(wrapped_result);
+        std::lock_guard<std::recursive_mutex> lock(goal_handles_mutex_);
+        goal_handles_.erase(goal_handle->get_goal_id());
+      };
 
-        try {
-          bool intra_process_send_done = false;
-    
-          std::lock_guard<std::recursive_mutex> lock(ipc_mutex_);
-    
-          if (use_intra_process_) {
-            auto ipm = weak_ipm_.lock();
-            if (!ipm) {
-              throw std::runtime_error(
+    try {
+      bool intra_process_send_done = false;
+
+      std::lock_guard<std::recursive_mutex> lock(ipc_mutex_);
+
+      if (use_intra_process_) {
+        auto ipm = weak_ipm_.lock();
+        if (!ipm) {
+          throw std::runtime_error(
                       "intra process send result called after destruction of intra process manager");
-            }
-            bool intra_process_server_available =
-              ipm->action_server_is_available(ipc_action_client_id_);
-    
+        }
+        bool intra_process_server_available =
+          ipm->action_server_is_available(ipc_action_client_id_);
+
             // Check if there's an intra-process action server available matching this client.
             // If there's not, we fall back into inter-process communication, since
             // the server might be available in another process or was configured to not use IPC.
-            if (intra_process_server_available) {
-              ipm->intra_process_action_send_result_request<ActionT>(
+        if (intra_process_server_available) {
+          ipm->intra_process_action_send_result_request<ActionT>(
                 ipc_action_client_id_,
                 std::move(goal_result_request),
                 callback);
-              intra_process_send_done = true;
-            }
-          }
-    
-          if (!intra_process_send_done) {
+          intra_process_send_done = true;
+        }
+      }
+
+      if (!intra_process_send_done) {
             // Send inter-process result request
-            this->send_result_request(
+        this->send_result_request(
               std::static_pointer_cast<void>(goal_result_request),
               callback);
-          }
+      }
     } catch (rclcpp::exceptions::RCLError & ex) {
       // This will cause an exception when the user tries to access the result
       goal_handle->invalidate(exceptions::UnawareGoalHandleError(ex.message));
@@ -921,35 +921,35 @@ private:
         }
       };
 
-      bool intra_process_send_done = false;
-  
-      std::lock_guard<std::recursive_mutex> lock(ipc_mutex_);
-  
-      if (use_intra_process_) {
-        auto ipm = weak_ipm_.lock();
-        if (!ipm) {
-          throw std::runtime_error(
+    bool intra_process_send_done = false;
+
+    std::lock_guard<std::recursive_mutex> lock(ipc_mutex_);
+
+    if (use_intra_process_) {
+      auto ipm = weak_ipm_.lock();
+      if (!ipm) {
+        throw std::runtime_error(
                   "intra process send goal called after destruction of intra process manager");
-        }
-        bool intra_process_server_available = ipm->action_server_is_available(ipc_action_client_id_);
-  
+      }
+      bool intra_process_server_available = ipm->action_server_is_available(ipc_action_client_id_);
+
         // Check if there's an intra-process action server available matching this client.
         // If there's not, we fall back into inter-process communication, since
         // the server might be available in another process or was configured to not use IPC.
-        if (intra_process_server_available) {
-          ipm->intra_process_action_send_cancel_request<ActionT>(
+      if (intra_process_server_available) {
+        ipm->intra_process_action_send_cancel_request<ActionT>(
             ipc_action_client_id_,
             std::move(cancel_request),
             callback);
-          intra_process_send_done = true;
-        }
+        intra_process_send_done = true;
       }
-  
-      if (!intra_process_send_done) {
-        this->send_cancel_request(
+    }
+
+    if (!intra_process_send_done) {
+      this->send_cancel_request(
           std::static_pointer_cast<void>(cancel_request),
           callback);
-      }
+    }
     return future;
   }
 

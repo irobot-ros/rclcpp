@@ -795,6 +795,7 @@ ClientBase::execute(const std::shared_ptr<void> & data_in)
         }
       }
     }, data_ptr->data);
+}
 
 void
 ClientBase::setup_intra_process(

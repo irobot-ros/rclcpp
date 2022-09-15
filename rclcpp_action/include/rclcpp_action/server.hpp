@@ -304,7 +304,7 @@ protected:
   RCLCPP_ACTION_PUBLIC
   std::shared_ptr<void>
   get_result_response(GoalUUID uuid);
-  
+
   // End API for communication between ServerBase and Server<>
   // ---------------------------------------------------------
 
@@ -701,9 +701,9 @@ protected:
           ipm->remove_intra_process_action_client_goal_uuid(hashed_uuid);
         } else {
         // Send result message to anyone that asked
-        shared_this->publish_result(goal_uuid, result_message);
+          shared_this->publish_result(goal_uuid, result_message);
         // Publish a status message any time a goal handle changes state
-        shared_this->publish_status();
+          shared_this->publish_status();
         }
 
         // notify base so it can recalculate the expired goal timer
@@ -746,7 +746,7 @@ protected:
             std::move(status_msg));
 
         } else {
-        shared_this->publish_status();
+          shared_this->publish_status();
         }
       };
 
@@ -780,7 +780,7 @@ protected:
             ipc_action_client_id,
             std::move(feedback_msg));
         } else {
-        shared_this->publish_feedback(std::static_pointer_cast<void>(feedback_msg));
+          shared_this->publish_feedback(std::static_pointer_cast<void>(feedback_msg));
         }
       };
 
