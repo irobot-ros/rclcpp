@@ -70,18 +70,16 @@ public:
   void
   add_to_wait_set(rcl_wait_set_t * wait_set) override;
 
-  virtual bool
+  bool
   is_ready(rcl_wait_set_t * wait_set) override = 0;
 
-  virtual
   std::shared_ptr<void>
   take_data() override = 0;
 
-  virtual
   std::shared_ptr<void>
   take_data_by_entity_id(size_t id) override = 0;
 
-  virtual void
+  void
   execute(std::shared_ptr<void> & data) override = 0;
 
   RCLCPP_PUBLIC
