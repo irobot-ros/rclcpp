@@ -478,7 +478,21 @@ public:
     }
   }
 
-  virtual ~Server() = default;
+  virtual ~Server()
+  {
+    if (!use_intra_process_) {
+      return;
+    }
+    auto ipm = weak_ipm_.lock();
+    if (!ipm) {
+      // TODO(ivanpauno): should this raise an error?
+      RCLCPP_WARN(
+        rclcpp::get_logger("rclcpp"),
+        "Intra process manager died before than an action server.");
+      return;
+    }
+    ipm->remove_action_server(ipc_action_server_id_);
+  }
 
 protected:
   // Intra-process version of execute_goal_request_received_

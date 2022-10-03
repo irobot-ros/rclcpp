@@ -668,6 +668,19 @@ public:
       }
       it = goal_handles_.erase(it);
     }
+
+    if (!use_intra_process_) {
+      return;
+    }
+    auto ipm = weak_ipm_.lock();
+    if (!ipm) {
+      // TODO(ivanpauno): should this raise an error?
+      RCLCPP_WARN(
+        rclcpp::get_logger("rclcpp"),
+        "Intra process manager died before than an action client.");
+      return;
+    }
+    ipm->remove_action_client(ipc_action_client_id_);
   }
 
 private:

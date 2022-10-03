@@ -369,7 +369,7 @@ public:
       auto warning_msg =
         "Intra-process service gone out of scope. "
         "Do inter-process requests.\n"
-        "Client topic name: " + std::string(cli->get_service_name());
+        "Client service name: " + std::string(cli->get_service_name());
       RCLCPP_WARN(rclcpp::get_logger("rclcpp"), warning_msg.c_str());
       return;
     }
