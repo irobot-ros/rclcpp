@@ -881,24 +881,26 @@ protected:
   int64_t
   async_send_request_impl(SharedRequest request, CallbackInfoVariant value)
   {
-    std::lock_guard<std::recursive_mutex> lock(ipc_mutex_);
-    if (use_intra_process_) {
-      auto ipm = weak_ipm_.lock();
-      if (!ipm) {
-        throw std::runtime_error(
-                "intra process send called after destruction of intra process manager");
-      }
-      bool intra_process_server_available = ipm->service_is_available(intra_process_client_id_);
+    {
+      std::lock_guard<std::recursive_mutex> lock(ipc_mutex_);
+      if (use_intra_process_) {
+        auto ipm = weak_ipm_.lock();
+        if (!ipm) {
+          throw std::runtime_error(
+                  "intra process send called after destruction of intra process manager");
+        }
+        bool intra_process_server_available = ipm->service_is_available(intra_process_client_id_);
 
-      // Check if there's an intra-process server available matching this client.
-      // If there's not, we fall back into inter-process communication, since
-      // the server might be available in another process or was configured to not use IPC.
-      if (intra_process_server_available) {
-        // Send intra-process request
-        ipm->send_intra_process_client_request<ServiceT>(
-          intra_process_client_id_,
-          std::make_pair(std::move(request), std::move(value)));
-        return ipc_sequence_number_++;
+        // Check if there's an intra-process server available matching this client.
+        // If there's not, we fall back into inter-process communication, since
+        // the server might be available in another process or was configured to not use IPC.
+        if (intra_process_server_available) {
+          // Send intra-process request
+          ipm->send_intra_process_client_request<ServiceT>(
+            intra_process_client_id_,
+            std::make_pair(std::move(request), std::move(value)));
+          return ipc_sequence_number_++;
+        }
       }
     }
 
