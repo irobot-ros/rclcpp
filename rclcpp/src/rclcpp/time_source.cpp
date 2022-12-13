@@ -178,6 +178,18 @@ public:
     return true;
   }
 
+  bool are_all_clocks_rcl_ros_time()
+  {
+    std::lock_guard<std::mutex> guard(clock_list_lock_);
+    for (auto & clock : associated_clocks_) {
+      std::lock_guard<std::mutex> clock_guard(clock->get_clock_mutex());
+      if (clock->get_clock_type() != RCL_ROS_TIME) {
+        return false;
+      }
+    }
+    return true;
+  }
+
 private:
   // Store (and update on node attach) logger for logging.
   Logger logger_;
