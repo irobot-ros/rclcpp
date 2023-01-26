@@ -35,6 +35,8 @@ UnsupportedEventTypeException::UnsupportedEventTypeException(
 
 QOSEventHandlerBase::~QOSEventHandlerBase()
 {
+  std::lock_guard<std::recursive_mutex> lock(callback_mutex_);
+
   if (on_new_event_callback_) {
     clear_on_ready_callback();
   }
