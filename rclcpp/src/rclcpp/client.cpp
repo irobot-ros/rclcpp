@@ -75,6 +75,10 @@ ClientBase::take_type_erased_response(void * response_out, rmw_request_id_t & re
     &request_header_out,
     response_out);
   if (RCL_RET_CLIENT_TAKE_FAILED == ret) {
+    RCLCPP_ERROR(
+      rclcpp::get_logger("rclcpp"),
+      "Error in take_type_erased_response: RCL_RET_CLIENT_TAKE_FAILED. "
+      "Service name: %s", get_service_name());
     return false;
   } else if (RCL_RET_OK != ret) {
     rclcpp::exceptions::throw_from_rcl_error(ret);
