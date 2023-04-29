@@ -315,9 +315,6 @@ protected:
   bool use_intra_process_{false};
   IntraProcessManagerWeakPtr weak_ipm_;
   uint64_t intra_process_service_id_;
-
-  std::recursive_mutex callback_mutex_;
-  std::function<void(size_t)> on_new_request_callback_{nullptr};
 };
 
 template<typename ServiceT>
