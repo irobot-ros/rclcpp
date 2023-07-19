@@ -45,7 +45,7 @@ struct can_be_nullptr<T, std::void_t<
     decltype(std::declval<T>() == nullptr)>>: std::true_type {};
 #else
 struct can_be_nullptr<T, std::void_t<
-    decltype(std::declval<T>() == nullptr), decltype(std::declval<T &>() = nullptr)>>
+    decltype(std::declval<T>() == nullptr), decltype(std::declval<T &>())>>
   : std::true_type {};
 #endif
 }  // namespace detail
