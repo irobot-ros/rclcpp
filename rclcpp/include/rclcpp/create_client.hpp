@@ -65,7 +65,8 @@ create_client(
   std::shared_ptr<node_interfaces::NodeServicesInterface> node_services,
   const std::string & service_name,
   const rmw_qos_profile_t & qos_profile,
-  rclcpp::CallbackGroup::SharedPtr group)
+  rclcpp::CallbackGroup::SharedPtr group,
+  rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::NodeDefault)
 {
   rcl_client_options_t options = rcl_client_get_default_options();
   options.qos = qos_profile;
@@ -74,7 +75,8 @@ create_client(
     node_base.get(),
     node_graph,
     service_name,
-    options);
+    options,
+    ipc_setting);
 
   auto cli_base_ptr = std::dynamic_pointer_cast<rclcpp::ClientBase>(cli);
   node_services->add_client(cli_base_ptr, group);

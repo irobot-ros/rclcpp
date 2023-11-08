@@ -18,6 +18,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <iostream>
 
 #include "rcl_action/types.h"
 #include "rcl_action/goal_handle.h"

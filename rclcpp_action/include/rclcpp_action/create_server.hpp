@@ -65,7 +65,8 @@ create_server(
   typename Server<ActionT>::CancelCallback handle_cancel,
   typename Server<ActionT>::AcceptedCallback handle_accepted,
   const rcl_action_server_options_t & options = rcl_action_server_get_default_options(),
-  rclcpp::CallbackGroup::SharedPtr group = nullptr)
+  rclcpp::CallbackGroup::SharedPtr group = nullptr,
+  rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::Disable)
 {
   std::weak_ptr<rclcpp::node_interfaces::NodeWaitablesInterface> weak_node =
     node_waitables_interface;
@@ -104,9 +105,14 @@ create_server(
       options,
       handle_goal,
       handle_cancel,
-      handle_accepted), deleter);
+      handle_accepted,
+      ipc_setting), deleter);
 
   node_waitables_interface->add_waitable(action_server, group);
+
+  auto intra_process_action_server = action_server->get_intra_process_waitable();
+  node_waitables_interface->add_waitable(intra_process_action_server, group);
+
   return action_server;
 }
 
@@ -136,7 +142,8 @@ create_server(
   typename Server<ActionT>::CancelCallback handle_cancel,
   typename Server<ActionT>::AcceptedCallback handle_accepted,
   const rcl_action_server_options_t & options = rcl_action_server_get_default_options(),
-  rclcpp::CallbackGroup::SharedPtr group = nullptr)
+  rclcpp::CallbackGroup::SharedPtr group = nullptr,
+  rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::Disable)
 {
   return create_server<ActionT>(
     node->get_node_base_interface(),
@@ -148,7 +155,8 @@ create_server(
     handle_cancel,
     handle_accepted,
     options,
-    group);
+    group,
+    ipc_setting);
 }
 }  // namespace rclcpp_action
 #endif  // RCLCPP_ACTION__CREATE_SERVER_HPP_

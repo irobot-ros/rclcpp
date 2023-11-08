@@ -81,6 +81,13 @@ LifecycleNode::LifecycleNodeInterfaceImpl::init(bool enable_communication_interf
   state_machine_options.enable_com_interface = enable_communication_interface;
   state_machine_options.allocator = node_options->allocator;
 
+  rclcpp::IntraProcessSetting ipc_setting;
+  if (node_base_interface_->get_use_intra_process_default()) {
+    ipc_setting = rclcpp::IntraProcessSetting::Enable;
+  } else {
+    ipc_setting = rclcpp::IntraProcessSetting::Disable;
+  }
+
   // The call to initialize the state machine takes
   // currently five different typesupports for all publishers/services
   // created within the RCL_LIFECYCLE structure.
@@ -116,9 +123,11 @@ LifecycleNode::LifecycleNodeInterfaceImpl::init(bool enable_communication_interf
       any_cb.set(std::move(cb));
 
       srv_change_state_ = std::make_shared<rclcpp::Service<ChangeStateSrv>>(
-        node_base_interface_->get_shared_rcl_node_handle(),
+        node_base_interface_,
         &state_machine_.com_interface.srv_change_state,
-        any_cb);
+        any_cb,
+        ipc_setting);
+
       node_services_interface_->add_service(
         std::dynamic_pointer_cast<rclcpp::ServiceBase>(srv_change_state_),
         nullptr);
@@ -132,9 +141,11 @@ LifecycleNode::LifecycleNodeInterfaceImpl::init(bool enable_communication_interf
       any_cb.set(std::move(cb));
 
       srv_get_state_ = std::make_shared<rclcpp::Service<GetStateSrv>>(
-        node_base_interface_->get_shared_rcl_node_handle(),
+        node_base_interface_,
         &state_machine_.com_interface.srv_get_state,
-        any_cb);
+        any_cb,
+        ipc_setting);
+
       node_services_interface_->add_service(
         std::dynamic_pointer_cast<rclcpp::ServiceBase>(srv_get_state_),
         nullptr);
@@ -148,9 +159,11 @@ LifecycleNode::LifecycleNodeInterfaceImpl::init(bool enable_communication_interf
       any_cb.set(std::move(cb));
 
       srv_get_available_states_ = std::make_shared<rclcpp::Service<GetAvailableStatesSrv>>(
-        node_base_interface_->get_shared_rcl_node_handle(),
+        node_base_interface_,
         &state_machine_.com_interface.srv_get_available_states,
-        any_cb);
+        any_cb,
+        ipc_setting);
+
       node_services_interface_->add_service(
         std::dynamic_pointer_cast<rclcpp::ServiceBase>(srv_get_available_states_),
         nullptr);
@@ -165,9 +178,11 @@ LifecycleNode::LifecycleNodeInterfaceImpl::init(bool enable_communication_interf
 
       srv_get_available_transitions_ =
         std::make_shared<rclcpp::Service<GetAvailableTransitionsSrv>>(
-        node_base_interface_->get_shared_rcl_node_handle(),
+        node_base_interface_,
         &state_machine_.com_interface.srv_get_available_transitions,
-        any_cb);
+        any_cb,
+        ipc_setting);
+
       node_services_interface_->add_service(
         std::dynamic_pointer_cast<rclcpp::ServiceBase>(srv_get_available_transitions_),
         nullptr);
@@ -182,9 +197,11 @@ LifecycleNode::LifecycleNodeInterfaceImpl::init(bool enable_communication_interf
 
       srv_get_transition_graph_ =
         std::make_shared<rclcpp::Service<GetAvailableTransitionsSrv>>(
-        node_base_interface_->get_shared_rcl_node_handle(),
+        node_base_interface_,
         &state_machine_.com_interface.srv_get_transition_graph,
-        any_cb);
+        any_cb,
+        ipc_setting);
+
       node_services_interface_->add_service(
         std::dynamic_pointer_cast<rclcpp::ServiceBase>(srv_get_transition_graph_),
         nullptr);
