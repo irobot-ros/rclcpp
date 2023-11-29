@@ -427,7 +427,7 @@ public:
     rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr node_logging,
     const std::string & action_name,
     const rcl_action_client_options_t & client_options = rcl_action_client_get_default_options(),
-    rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::Disable)
+    rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::NodeDefault)
   : ClientBase(
       node_base, node_graph, node_logging, action_name,
       rosidl_typesupport_cpp::get_action_type_support_handle<ActionT>(),
