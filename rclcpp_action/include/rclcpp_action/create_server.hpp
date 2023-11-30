@@ -66,7 +66,7 @@ create_server(
   typename Server<ActionT>::AcceptedCallback handle_accepted,
   const rcl_action_server_options_t & options = rcl_action_server_get_default_options(),
   rclcpp::CallbackGroup::SharedPtr group = nullptr,
-  rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::Disable)
+  rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::NodeDefault)
 {
   std::weak_ptr<rclcpp::node_interfaces::NodeWaitablesInterface> weak_node =
     node_waitables_interface;
@@ -143,7 +143,7 @@ create_server(
   typename Server<ActionT>::AcceptedCallback handle_accepted,
   const rcl_action_server_options_t & options = rcl_action_server_get_default_options(),
   rclcpp::CallbackGroup::SharedPtr group = nullptr,
-  rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::Disable)
+  rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::NodeDefault)
 {
   return create_server<ActionT>(
     node->get_node_base_interface(),

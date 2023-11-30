@@ -49,7 +49,7 @@ create_client(
   const std::string & name,
   rclcpp::CallbackGroup::SharedPtr group = nullptr,
   const rcl_action_client_options_t & options = rcl_action_client_get_default_options(),
-  rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::Disable)
+  rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::NodeDefault)
 {
   std::weak_ptr<rclcpp::node_interfaces::NodeWaitablesInterface> weak_node =
     node_waitables_interface;
@@ -113,7 +113,7 @@ create_client(
   const std::string & name,
   rclcpp::CallbackGroup::SharedPtr group = nullptr,
   const rcl_action_client_options_t & options = rcl_action_client_get_default_options(),
-  rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::Disable)
+  rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::NodeDefault)
 {
   return rclcpp_action::create_client<ActionT>(
     node->get_node_base_interface(),
