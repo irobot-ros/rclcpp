@@ -556,7 +556,7 @@ public:
     if (use_intra_process_)
     {
       // The sequence number here is used as a proxy for the intra-process client ID
-      service_intra_process->send_response(req_id.sequence_number, response);
+      service_intra_process_->send_response(req_id.sequence_number, response);
       return;
     }
 
