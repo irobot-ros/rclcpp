@@ -108,26 +108,6 @@ public:
     return std::static_pointer_cast<void>(data);
   }
 
-  void execute(std::shared_ptr<void> & data)
-  {
-    auto ptr = std::static_pointer_cast<ClientIDtoRequest>(data);
-
-    uint64_t intra_process_client_id = ptr->first;
-    SharedRequest & typed_request = ptr->second.first;
-    CallbackInfoVariant & value = ptr->second.second;
-
-    // To allow for the user callback to handle deferred responses for IPC in an ambiguous way,
-    // we are overloading the rmw_request_id semantics to provide the intra process client ID.
-    auto req_id = std::make_shared<rmw_request_id_t>();
-    req_id->sequence_number = intra_process_client_id;
-
-    SharedResponse response = any_callback_.dispatch(service_handle_, req_id, std::move(typed_request));
-
-    if (response) {
-      send_response(intra_process_client_id, response);
-    }
-  }
-
   void send_response(uint64_t & intra_process_client_id, SharedResponse & response)
   {
     std::unique_lock<std::recursive_mutex> lock(reentrant_mutex_);
@@ -148,10 +128,33 @@ public:
       auto client = std::dynamic_pointer_cast<
         rclcpp::experimental::ClientIntraProcess<ServiceT>>(
         client_intra_process_base);
+      CallbackInfoVariant & value = callback_info_[intra_process_client_id];
       client->store_intra_process_response(
         std::make_pair(std::move(response), std::move(value)));
     } else {
       clients_.erase(client_it);
+    }
+
+    callback_info_.erase(intra_process_client_id);
+  }
+
+  void execute(std::shared_ptr<void> & data)
+  {
+    auto ptr = std::static_pointer_cast<ClientIDtoRequest>(data);
+
+    uint64_t intra_process_client_id = ptr->first;
+    SharedRequest & typed_request = ptr->second.first;
+    callback_info_[intra_process_client_id] = std::ref(ptr->second.second);
+
+    // To allow for the user callback to handle deferred responses for IPC in an ambiguous way,
+    // we are overloading the rmw_request_id semantics to provide the intra process client ID.
+    auto req_id = std::make_shared<rmw_request_id_t>();
+    req_id->sequence_number = intra_process_client_id;
+
+    SharedResponse response = any_callback_.dispatch(service_handle_, req_id, std::move(typed_request));
+
+    if (response) {
+      send_response(intra_process_client_id, response);
     }
   }
 
@@ -165,6 +168,8 @@ protected:
   AnyServiceCallback<ServiceT> any_callback_;
 
   std::shared_ptr<rclcpp::Service<ServiceT>> service_handle_;
+
+  std::unordered_map<uint64_t, std::reference_wrapper<CallbackInfoVariant>> callback_info_;
 };
 
 }  // namespace experimental
