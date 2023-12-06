@@ -553,6 +553,13 @@ public:
   void
   send_response(rmw_request_id_t & req_id, typename ServiceT::Response & response)
   {
+    if (use_intra_process_)
+    {
+      // The sequence number here is used as a proxy for the intra-process client ID
+      service_intra_process->(req_id.sequence_number, response);
+      return;
+    }
+
     rcl_ret_t ret = rcl_send_response(get_service_handle().get(), &req_id, &response);
 
     if (ret == RCL_RET_TIMEOUT) {

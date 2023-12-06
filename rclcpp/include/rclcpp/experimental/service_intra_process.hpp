@@ -70,11 +70,12 @@ public:
   using ClientIDtoRequest = std::pair<uint64_t, RequestCallbackPair>;
 
   ServiceIntraProcess(
+    std::shared_ptr<rclcpp::Service<ServiceT>> service_handle,
     AnyServiceCallback<ServiceT> callback,
     rclcpp::Context::SharedPtr context,
     const std::string & service_name,
     const rclcpp::QoS & qos_profile)
-  : ServiceIntraProcessBase(context, service_name, qos_profile), any_callback_(callback)
+  : ServiceIntraProcessBase(context, service_name, qos_profile), any_callback_(callback), service_handle_(service_handle)
   {
     // Create the intra-process buffer.
     buffer_ = rclcpp::experimental::create_service_intra_process_buffer<
@@ -115,32 +116,42 @@ public:
     SharedRequest & typed_request = ptr->second.first;
     CallbackInfoVariant & value = ptr->second.second;
 
-    SharedResponse response = any_callback_.dispatch(nullptr, nullptr, std::move(typed_request));
+    // To allow for the user callback to handle deferred responses for IPC in an ambiguous way,
+    // we are overloading the rmw_request_id semantics to provide the intra process client ID.
+    auto req_id = std::make_shared<rmw_request_id_t>();
+    req_id->sequence_number = intra_process_client_id;
+
+    SharedResponse response = any_callback_.dispatch(service_handle_, req_id, std::move(typed_request));
 
     if (response) {
-      std::unique_lock<std::recursive_mutex> lock(reentrant_mutex_);
+      send_response(intra_process_client_id, response);
+    }
+  }
 
-      auto client_it = clients_.find(intra_process_client_id);
+  void send_response(uint64_t & intra_process_client_id, SharedResponse & response)
+  {
+    std::unique_lock<std::recursive_mutex> lock(reentrant_mutex_);
 
-      if (client_it == clients_.end()) {
-        RCLCPP_WARN(
-          rclcpp::get_logger("rclcpp"),
-          "Calling intra_process_service_send_response for invalid or no "
-          "longer existing client id");
-        return;
-      }
+    auto client_it = clients_.find(intra_process_client_id);
 
-      auto client_intra_process_base = client_it->second.lock();
+    if (client_it == clients_.end()) {
+      RCLCPP_WARN(
+        rclcpp::get_logger("rclcpp"),
+        "Calling intra_process_service_send_response for invalid or no "
+        "longer existing client id");
+      return;
+    }
 
-      if (client_intra_process_base) {
-        auto client = std::dynamic_pointer_cast<
-          rclcpp::experimental::ClientIntraProcess<ServiceT>>(
-          client_intra_process_base);
-        client->store_intra_process_response(
-          std::make_pair(std::move(response), std::move(value)));
-      } else {
-        clients_.erase(client_it);
-      }
+    auto client_intra_process_base = client_it->second.lock();
+
+    if (client_intra_process_base) {
+      auto client = std::dynamic_pointer_cast<
+        rclcpp::experimental::ClientIntraProcess<ServiceT>>(
+        client_intra_process_base);
+      client->store_intra_process_response(
+        std::make_pair(std::move(response), std::move(value)));
+    } else {
+      clients_.erase(client_it);
     }
   }
 
@@ -152,6 +163,8 @@ protected:
   BufferUniquePtr buffer_;
 
   AnyServiceCallback<ServiceT> any_callback_;
+
+  std::shared_ptr<rclcpp::Service<ServiceT>> service_handle_;
 };
 
 }  // namespace experimental
