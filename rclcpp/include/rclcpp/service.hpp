@@ -550,6 +550,12 @@ public:
     }
   }
 
+  std::shared_ptr<Service<ServiceT>>
+  get_handle()
+  {
+    return shared_from_this();
+  }
+
   void
   send_response(rmw_request_id_t & req_id, typename ServiceT::Response & response)
   {
@@ -598,6 +604,7 @@ public:
     using ServiceIntraProcessT = rclcpp::experimental::ServiceIntraProcess<ServiceT>;
 
     service_intra_process_ = std::make_shared<ServiceIntraProcessT>(
+      std::bind(&Service::get_handle, this),
       any_callback_,
       context_,
       this->get_service_name(),
