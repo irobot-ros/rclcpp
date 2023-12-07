@@ -290,7 +290,7 @@ protected:
     uint64_t intra_process_service_id,
     IntraProcessManagerWeakPtr weak_ipm);
 
-  std::shared_ptr<rclcpp::experimental::ServiceIntraProcessBase> service_intra_process_;
+  // std::shared_ptr<rclcpp::experimental::ServiceIntraProcessBase> service_intra_process_;
 
   std::shared_ptr<rcl_node_t> node_handle_;
   std::shared_ptr<rclcpp::Context> context_;
@@ -553,7 +553,7 @@ public:
   std::shared_ptr<Service<ServiceT>>
   get_handle()
   {
-    return shared_from_this();
+    return this->shared_from_this();
   }
 
   void
@@ -620,6 +620,8 @@ private:
   RCLCPP_DISABLE_COPY(Service)
 
   AnyServiceCallback<ServiceT> any_callback_;
+  std::shared_ptr<rclcpp::experimental::ServiceIntraProcess<ServiceT>> service_intra_process_;
+
 };
 
 }  // namespace rclcpp

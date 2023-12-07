@@ -96,8 +96,8 @@ public:
     rclcpp::experimental::ClientIntraProcessBase::SharedPtr client,
     uint64_t client_id);
 
-  RCLCPP_PUBLIC
-  void send_response(uint64_t & intra_process_client_id, SharedResponse & response) = 0;
+  // RCLCPP_PUBLIC
+  // void send_response(uint64_t & intra_process_client_id, 1tti & response) = 0;
 
   /// Set a callback to be called when each new request arrives.
   /**
