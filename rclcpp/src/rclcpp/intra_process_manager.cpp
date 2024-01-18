@@ -26,13 +26,24 @@ namespace experimental
 static std::atomic<uint64_t> _next_unique_id {1};
 
 uint64_t
-IntraProcessManager::add_publisher(rclcpp::PublisherBase::SharedPtr publisher)
+IntraProcessManager::add_publisher(
+  rclcpp::PublisherBase::SharedPtr publisher,
+  rclcpp::experimental::buffers::IntraProcessBufferBase::SharedPtr buffer)
 {
   std::unique_lock<std::shared_timed_mutex> lock(mutex_);
 
   uint64_t pub_id = IntraProcessManager::get_next_unique_id();
 
   publishers_[pub_id] = publisher;
+  if (publisher->is_durability_transient_local()) {
+    if (buffer) {
+      publisher_buffers_[pub_id] = buffer;
+    } else {
+      throw std::runtime_error(
+              "transient_local publisher needs to pass"
+              "a valid publisher buffer ptr when calling add_publisher()");
+    }
+  }
 
   // Initialize the subscriptions storage for this publisher.
   pub_to_subs_[pub_id] = SplittedSubscriptions();
@@ -280,6 +291,7 @@ IntraProcessManager::remove_publisher(uint64_t intra_process_publisher_id)
   std::unique_lock<std::shared_timed_mutex> lock(mutex_);
 
   publishers_.erase(intra_process_publisher_id);
+  publisher_buffers_.erase(intra_process_publisher_id);
   pub_to_subs_.erase(intra_process_publisher_id);
 }
 

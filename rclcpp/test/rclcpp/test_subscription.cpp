@@ -580,6 +580,132 @@ TEST_F(TestSubscription, on_new_intra_process_message_callback) {
   EXPECT_THROW(sub->set_on_new_intra_process_message_callback(invalid_cb), std::invalid_argument);
 }
 
+TEST_F(TestSubscription, get_network_flow_endpoints_errors) {
+  initialize();
+  const rclcpp::QoS subscription_qos(1);
+  auto subscription_callback = [](test_msgs::msg::Empty::ConstSharedPtr msg) {
+      (void)msg;
+    };
+  auto subscription = node_->create_subscription<test_msgs::msg::Empty>(
+    "topic", subscription_qos, subscription_callback);
+
+  {
+    auto mock = mocking_utils::patch_and_return(
+      "lib:rclcpp", rcl_subscription_get_network_flow_endpoints, RCL_RET_ERROR);
+    auto mock_network_flow_endpoint_array_fini = mocking_utils::patch_and_return(
+      "lib:rclcpp", rcl_network_flow_endpoint_array_fini, RCL_RET_ERROR);
+    EXPECT_THROW(
+      subscription->get_network_flow_endpoints(),
+      rclcpp::exceptions::RCLError);
+  }
+  {
+    auto mock_network_flow_endpoint_array_fini = mocking_utils::patch_and_return(
+      "lib:rclcpp", rcl_network_flow_endpoint_array_fini, RCL_RET_ERROR);
+    EXPECT_THROW(
+      subscription->get_network_flow_endpoints(),
+      rclcpp::exceptions::RCLError);
+  }
+  {
+    auto mock = mocking_utils::patch_and_return(
+      "lib:rclcpp", rcl_subscription_get_network_flow_endpoints, RCL_RET_OK);
+    auto mock_network_flow_endpoint_array_fini = mocking_utils::patch_and_return(
+      "lib:rclcpp", rcl_network_flow_endpoint_array_fini, RCL_RET_OK);
+    EXPECT_NO_THROW(subscription->get_network_flow_endpoints());
+  }
+}
+
+class TestSubscriptionSub : public ::testing::Test
+{
+protected:
+  static void SetUpTestCase()
+  {
+    rclcpp::init(0, nullptr);
+  }
+
+  static void TearDownTestCase()
+  {
+    rclcpp::shutdown();
+  }
+
+  void SetUp()
+  {
+    node_ = std::make_shared<rclcpp::Node>("test_subscription", "/ns");
+    subnode_ = node_->create_sub_node("sub_ns");
+  }
+
+  rclcpp::Node::SharedPtr node_;
+  rclcpp::Node::SharedPtr subnode_;
+};
+
+/*
+   Testing subscription construction and destruction for subnodes.
+ */
+TEST_F(TestSubscriptionSub, construction_and_destruction) {
+  auto callback = [](test_msgs::msg::Empty::ConstSharedPtr msg) {
+      (void)msg;
+    };
+  {
+    auto sub = subnode_->create_subscription<test_msgs::msg::Empty>("topic", 1, callback);
+    EXPECT_STREQ(sub->get_topic_name(), "/ns/sub_ns/topic");
+  }
+
+  {
+    auto sub = subnode_->create_subscription<test_msgs::msg::Empty>("/topic", 1, callback);
+    EXPECT_STREQ(sub->get_topic_name(), "/topic");
+  }
+
+  {
+    auto sub = subnode_->create_subscription<test_msgs::msg::Empty>("~/topic", 1, callback);
+    std::string expected_topic_name =
+      std::string(node_->get_namespace()) + "/" + node_->get_name() + "/topic";
+    EXPECT_STREQ(sub->get_topic_name(), expected_topic_name.c_str());
+  }
+
+  {
+    ASSERT_THROW(
+    {
+      auto sub = node_->create_subscription<test_msgs::msg::Empty>("invalid_topic?", 1, callback);
+    }, rclcpp::exceptions::InvalidTopicNameError);
+  }
+}
+
+struct TestParameters final
+{
+  TestParameters(rclcpp::QoS qos, std::string description)
+  : qos(qos), description(description) {}
+  rclcpp::QoS qos;
+  std::string description;
+};
+
+std::ostream & operator<<(std::ostream & out, const TestParameters & params)
+{
+  out << params.description;
+  return out;
+}
+
+class TestSubscriptionInvalidIntraprocessQos
+  : public TestSubscription,
+  public ::testing::WithParamInterface<TestParameters>
+{};
+
+static std::vector<TestParameters> invalid_qos_profiles()
+{
+  std::vector<TestParameters> parameters;
+
+  parameters.reserve(1);
+  parameters.push_back(
+    TestParameters(
+      rclcpp::QoS(rclcpp::KeepAll()),
+      "keep_all_qos"));
+
+  return parameters;
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  TestSubscriptionThrows, TestSubscriptionInvalidIntraprocessQos,
+  ::testing::ValuesIn(invalid_qos_profiles()),
+  ::testing::PrintToStringParamName());
+
 /*
    Testing subscription with intraprocess enabled and invalid QoS
  */
