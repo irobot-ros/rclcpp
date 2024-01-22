@@ -561,7 +561,7 @@ public:
   {
     if (use_intra_process_)
     {
-      auto intra_response = std::make_shared<ServiceT::Response>(response);
+      auto intra_response = std::make_shared<typename ServiceT::Response>(response);
       // The sequence number here is used as a proxy for the intra-process client ID
       service_intra_process_->send_response(req_id.sequence_number, intra_response);
       return;
