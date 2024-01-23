@@ -146,7 +146,7 @@ public:
 
     uint64_t intra_process_client_id = ptr->first;
     SharedRequest & typed_request = ptr->second.first;
-    callback_info_[intra_process_client_id] = ptr->second.second;
+    callback_info_.emplace(intra_process_client_id, ptr->second.second);
 
     // To allow for the user callback to handle deferred responses for IPC in an ambiguous way,
     // we are overloading the rmw_request_id semantics to provide the intra process client ID.
