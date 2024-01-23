@@ -110,7 +110,7 @@ public:
     return std::static_pointer_cast<void>(data);
   }
 
-  void send_response(uint64_t & intra_process_client_id, SharedResponse & response)
+  void send_response(uint64_t intra_process_client_id, SharedResponse & response)
   {
     std::unique_lock<std::recursive_mutex> lock(reentrant_mutex_);
 
