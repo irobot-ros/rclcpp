@@ -172,7 +172,7 @@ protected:
 
   GetServiceHandle get_service_handle_fcn_ {nullptr};
 
-  std::unordered_map<uint64_t, std::reference_wrapper<CallbackInfoVariant>> callback_info_;
+  std::unordered_map<uint64_t, CallbackInfoVariant> callback_info_;
 };
 
 }  // namespace experimental
