@@ -290,8 +290,6 @@ protected:
     uint64_t intra_process_service_id,
     IntraProcessManagerWeakPtr weak_ipm);
 
-  // std::shared_ptr<rclcpp::experimental::ServiceIntraProcessBase> service_intra_process_;
-
   std::shared_ptr<rcl_node_t> node_handle_;
   std::shared_ptr<rclcpp::Context> context_;
 
