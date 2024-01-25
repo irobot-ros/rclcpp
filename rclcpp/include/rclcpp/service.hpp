@@ -459,7 +459,7 @@ public:
     rcl_service_t * service_handle,
     AnyServiceCallback<ServiceT> any_callback)
   : ServiceBase(node_base),
-    any_callback_(any_callback),
+    any_callback_(any_callback)
   {
     // check if service handle was initialized
     if (!rcl_service_is_valid(service_handle)) {
