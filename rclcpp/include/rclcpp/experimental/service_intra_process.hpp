@@ -69,15 +69,13 @@ public:
   using RequestCallbackPair = std::pair<SharedRequest, CallbackInfoVariant>;
   using ClientIDtoRequest = std::pair<uint64_t, RequestCallbackPair>;
 
-  using GetServiceHandle = std::function<std::shared_ptr<rclcpp::Service<ServiceT>> ()>;
-
   ServiceIntraProcess(
-    GetServiceHandle get_service_handle_fcn,
+    std::shared_ptr<rclcpp::Service<ServiceT>> service_handle,
     AnyServiceCallback<ServiceT> callback,
     rclcpp::Context::SharedPtr context,
     const std::string & service_name,
     const rclcpp::QoS & qos_profile)
-  : ServiceIntraProcessBase(context, service_name, qos_profile), any_callback_(callback), get_service_handle_fcn_(get_service_handle_fcn)
+  : ServiceIntraProcessBase(context, service_name, qos_profile), any_callback_(callback), service_handle_(service_handle)
   {
     // Create the intra-process buffer.
     buffer_ = rclcpp::experimental::create_service_intra_process_buffer<
@@ -156,8 +154,7 @@ public:
     auto req_id = std::make_shared<rmw_request_id_t>();
     req_id->sequence_number = intra_process_client_id;
 
-    auto service_handle = get_service_handle_fcn_();
-    SharedResponse response = any_callback_.dispatch(service_handle, req_id, std::move(typed_request));
+    SharedResponse response = any_callback_.dispatch(service_handle_, req_id, std::move(typed_request));
 
     if (response) {
       send_response(intra_process_client_id, response);
@@ -173,7 +170,7 @@ protected:
 
   AnyServiceCallback<ServiceT> any_callback_;
 
-  GetServiceHandle get_service_handle_fcn_ {nullptr};
+  std::shared_ptr<rclcpp::Service<ServiceT>> service_handle_;
 
   std::unordered_map<uint64_t, CallbackInfoVariant> callback_info_;
 };

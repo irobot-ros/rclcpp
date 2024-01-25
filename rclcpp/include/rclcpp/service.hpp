@@ -341,14 +341,12 @@ public:
    * \param[in] service_name Name of the topic to publish to.
    * \param[in] any_callback User defined callback to call when a client request is received.
    * \param[in] service_options options for the subscription.
-   * \param[in] ipc_setting Intra-process communication setting for the service.
    */
   Service(
     std::shared_ptr<rclcpp::node_interfaces::NodeBaseInterface> node_base,
     const std::string & service_name,
     AnyServiceCallback<ServiceT> any_callback,
-    rcl_service_options_t & service_options,
-    rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::NodeDefault)
+    rcl_service_options_t & service_options)
   : ServiceBase(node_base), any_callback_(any_callback)
   {
     using rosidl_typesupport_cpp::get_service_type_support_handle;
@@ -396,7 +394,14 @@ public:
 #ifndef TRACETOOLS_DISABLED
     any_callback_.register_callback_for_tracing();
 #endif
+    // Setup continues in the post construction method, post_init_setup().
+  }
 
+  /// Called post construction, so that construction may continue after shared_from_this() works.
+  void post_init_setup(
+    std::shared_ptr<rclcpp::node_interfaces::NodeBaseInterface> node_base,
+    rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::NodeDefault)
+  {
     // Setup intra process if requested.
     if (rclcpp::detail::resolve_use_intra_process(ipc_setting, *node_base)) {
       create_intra_process_service();
@@ -412,13 +417,11 @@ public:
    * \param[in] node_handle NodeBaseInterface pointer that is used in part of the setup.
    * \param[in] service_handle service handle.
    * \param[in] any_callback User defined callback to call when a client request is received.
-   * \param[in] ipc_setting Intra-process communication setting for the service.
    */
   Service(
     std::shared_ptr<rclcpp::node_interfaces::NodeBaseInterface> node_base,
     std::shared_ptr<rcl_service_t> service_handle,
-    AnyServiceCallback<ServiceT> any_callback,
-    rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::NodeDefault)
+    AnyServiceCallback<ServiceT> any_callback)
   : ServiceBase(node_base),
     any_callback_(any_callback)
   {
@@ -438,11 +441,7 @@ public:
 #ifndef TRACETOOLS_DISABLED
     any_callback_.register_callback_for_tracing();
 #endif
-
-    // Setup intra process if requested.
-    if (rclcpp::detail::resolve_use_intra_process(ipc_setting, *node_base)) {
-      create_intra_process_service();
-    }
+    // Setup continues in the post construction method, post_init_setup().
   }
 
   /// Default constructor.
@@ -454,15 +453,13 @@ public:
    * \param[in] node_handle NodeBaseInterface pointer that is used in part of the setup.
    * \param[in] service_handle service handle.
    * \param[in] any_callback User defined callback to call when a client request is received.
-   * \param[in] ipc_setting Intra-process communication setting for the service.
    */
   Service(
     std::shared_ptr<rclcpp::node_interfaces::NodeBaseInterface> node_base,
     rcl_service_t * service_handle,
-    AnyServiceCallback<ServiceT> any_callback,
-    rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::NodeDefault)
+    AnyServiceCallback<ServiceT> any_callback)
   : ServiceBase(node_base),
-    any_callback_(any_callback)
+    any_callback_(any_callback),
   {
     // check if service handle was initialized
     if (!rcl_service_is_valid(service_handle)) {
@@ -482,10 +479,7 @@ public:
 #ifndef TRACETOOLS_DISABLED
     any_callback_.register_callback_for_tracing();
 #endif
-    // Setup intra process if requested.
-    if (rclcpp::detail::resolve_use_intra_process(ipc_setting, *node_base)) {
-      create_intra_process_service();
-    }
+    // Setup continues in the post construction method, post_init_setup().
   }
 
   Service() = delete;
@@ -548,12 +542,6 @@ public:
     }
   }
 
-  std::shared_ptr<Service<ServiceT>>
-  get_handle()
-  {
-    return this->shared_from_this();
-  }
-
   void
   send_response(rmw_request_id_t & req_id, typename ServiceT::Response & response)
   {
@@ -603,7 +591,7 @@ public:
     using ServiceIntraProcessT = rclcpp::experimental::ServiceIntraProcess<ServiceT>;
 
     service_intra_process_ = std::make_shared<ServiceIntraProcessT>(
-      std::bind(&Service::get_handle, this),
+      this->shared_from_this(),
       any_callback_,
       context_,
       this->get_service_name(),
