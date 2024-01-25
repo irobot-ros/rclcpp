@@ -142,6 +142,13 @@ public:
 
   void execute(std::shared_ptr<void> & data)
   {
+    auto serv_handle = service_handle_.lock();
+
+    // Return if the service handle is no longer valid
+    if (!serv_handle) {
+      return;
+    }
+
     auto ptr = std::static_pointer_cast<ClientIDtoRequest>(data);
 
     uint64_t intra_process_client_id = ptr->first;
@@ -153,13 +160,6 @@ public:
     // we are overloading the rmw_request_id semantics to provide the intra process client ID.
     auto req_id = std::make_shared<rmw_request_id_t>();
     req_id->sequence_number = intra_process_client_id;
-
-    auto serv_handle = service_handle_.lock();
-
-    // Return if the service handle is no longer valid
-    if (!serv_handle) {
-      return;
-    }
 
     SharedResponse response = any_callback_.dispatch(serv_handle, req_id, std::move(typed_request));
 
