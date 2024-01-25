@@ -932,11 +932,14 @@ private:
     std::lock_guard<std::recursive_mutex> lock(ipc_mutex_);
 
     use_intra_process_ = true;
+
+    std::string remapped_action_name = node_base->resolve_topic_or_service_name(name, true);
+
     // Create a ActionClientIntraProcess which will be given
     // to the intra-process manager.
     auto context = node_base->get_context();
     ipc_action_server_ = std::make_shared<ActionServerIntraProcessT>(
-      context, name, qos_history,
+      context, remapped_action_name, qos_history,
       std::bind(&Server::ipc_execute_goal_request_received, this, std::placeholders::_1),
       std::bind(&Server::ipc_execute_cancel_request_received, this, std::placeholders::_1),
       std::bind(&Server::ipc_execute_result_request_received, this, std::placeholders::_1));

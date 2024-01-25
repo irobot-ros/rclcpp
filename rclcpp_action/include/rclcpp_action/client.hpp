@@ -945,12 +945,14 @@ private:
     qos_history.feedback_topic_depth = options.feedback_topic_qos.history;
     qos_history.status_topic_depth = options.status_topic_qos.history;
 
+    std::string remapped_action_name = node_base->resolve_topic_or_service_name(action_name, true);
+
     // Create a ActionClientIntraProcess which will be given
     // to the intra-process manager.
     auto context = node_base->get_context();
     ipc_action_client_ = std::make_shared<ActionClientIntraProcessT>(
       context,
-      action_name,
+      remapped_action_name,
       qos_history,
       std::bind(&Client::handle_status_message, this, std::placeholders::_1),
       std::bind(&Client::handle_feedback_message, this, std::placeholders::_1));
