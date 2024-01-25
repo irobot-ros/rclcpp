@@ -607,6 +607,10 @@ private:
   RCLCPP_DISABLE_COPY(Service)
 
   AnyServiceCallback<ServiceT> any_callback_;
+
+  // In order to mirror the send_response signature with a SharedResponse
+  // of the appropriate ServiceT type, the template class is stored
+  // as opposed to the base class which has no knowledge of ServiceT.
   std::shared_ptr<rclcpp::experimental::ServiceIntraProcess<ServiceT>> service_intra_process_;
 
 };
