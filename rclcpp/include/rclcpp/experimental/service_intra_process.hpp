@@ -70,7 +70,7 @@ public:
   using ClientIDtoRequest = std::pair<uint64_t, RequestCallbackPair>;
 
   ServiceIntraProcess(
-    std::shared_ptr<rclcpp::Service<ServiceT>> service_handle,
+    std::weak_ptr<rclcpp::Service<ServiceT>> service_handle,
     AnyServiceCallback<ServiceT> callback,
     rclcpp::Context::SharedPtr context,
     const std::string & service_name,
@@ -154,7 +154,14 @@ public:
     auto req_id = std::make_shared<rmw_request_id_t>();
     req_id->sequence_number = intra_process_client_id;
 
-    SharedResponse response = any_callback_.dispatch(service_handle_, req_id, std::move(typed_request));
+    auto serv_handle = service_handle_.lock();
+
+    // Return if the service handle is no longer valid
+    if (!serv_handle) {
+      return;
+    }
+
+    SharedResponse response = any_callback_.dispatch(serv_handle, req_id, std::move(typed_request));
 
     if (response) {
       send_response(intra_process_client_id, response);
@@ -170,7 +177,7 @@ protected:
 
   AnyServiceCallback<ServiceT> any_callback_;
 
-  std::shared_ptr<rclcpp::Service<ServiceT>> service_handle_;
+  std::weak_ptr<rclcpp::Service<ServiceT>> service_handle_;
 
   std::unordered_map<uint64_t, CallbackInfoVariant> callback_info_;
 };
