@@ -121,6 +121,8 @@ public:
         rclcpp::get_logger("rclcpp"),
         "Calling intra_process_service_send_response for invalid or no "
         "longer existing client id");
+
+      callback_info_.erase(intra_process_client_id);
       return;
     }
 
