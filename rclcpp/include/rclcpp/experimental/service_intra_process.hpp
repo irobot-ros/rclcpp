@@ -179,6 +179,8 @@ protected:
 
   std::weak_ptr<rclcpp::Service<ServiceT>> service_handle_;
 
+  // Store callback variants in a map to support deferred response
+  // access by intra-process client id.
   std::unordered_map<uint64_t, CallbackInfoVariant> callback_info_;
 };
 
