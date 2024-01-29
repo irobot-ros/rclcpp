@@ -75,7 +75,8 @@ create_service(
 
   auto serv = Service<ServiceT>::make_shared(
     node_base,
-    service_name, any_service_callback, service_options, ipc_setting);
+    service_name, any_service_callback, service_options);
+  serv->post_init_setup(node_base, ipc_setting);
   auto serv_base_ptr = std::dynamic_pointer_cast<ServiceBase>(serv);
   node_services->add_service(serv_base_ptr, group);
   return serv;
