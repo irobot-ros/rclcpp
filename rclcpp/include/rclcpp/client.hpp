@@ -893,7 +893,7 @@ protected:
         // the server might be available in another process or was configured to not use IPC.
         if (intra_process_server_available) {
           // Send intra-process request
-          ipm->send_intra_process_client_request<ServiceT>(
+          ipm->template send_intra_process_client_request<ServiceT>(
             intra_process_client_id_,
             std::make_pair(std::move(request), std::move(value)));
           return ipc_sequence_number_++;
