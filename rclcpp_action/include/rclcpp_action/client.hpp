@@ -515,7 +515,7 @@ public:
       // If there's not, we fall back into inter-process communication, since
       // the server might be available in another process or was configured to not use IPC.
       if (intra_process_server_available) {
-        ipm->intra_process_action_send_goal_request<ActionT>(
+        ipm->template intra_process_action_send_goal_request<ActionT>(
           ipc_action_client_id_,
           std::move(goal_request),
           callback);
@@ -828,7 +828,7 @@ private:
         // If there's not, we fall back into inter-process communication, since
         // the server might be available in another process or was configured to not use IPC.
         if (intra_process_server_available) {
-          ipm->intra_process_action_send_result_request<ActionT>(
+          ipm->template intra_process_action_send_result_request<ActionT>(
             ipc_action_client_id_,
             std::move(goal_result_request),
             callback);
@@ -884,7 +884,7 @@ private:
       // If there's not, we fall back into inter-process communication, since
       // the server might be available in another process or was configured to not use IPC.
       if (intra_process_server_available) {
-        ipm->intra_process_action_send_cancel_request<ActionT>(
+        ipm->template intra_process_action_send_cancel_request<ActionT>(
           ipc_action_client_id_,
           std::move(cancel_request),
           callback);

@@ -528,7 +528,7 @@ protected:
       intra_process_action_client_id,
       std::hash<GoalUUID>()(uuid));
 
-    ipm->intra_process_action_send_goal_response<ActionT>(
+    ipm->template intra_process_action_send_goal_response<ActionT>(
       intra_process_action_client_id,
       std::move(goal_response));
 
@@ -597,7 +597,7 @@ protected:
         std::move(status_msg));
     }
 
-    ipm->intra_process_action_send_cancel_response<ActionT>(
+    ipm->template intra_process_action_send_cancel_response<ActionT>(
       intra_process_action_client_id,
       std::move(response));
   }
