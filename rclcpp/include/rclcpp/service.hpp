@@ -353,7 +353,7 @@ public:
     AnyServiceCallback<ServiceT> any_callback,
     rcl_service_options_t & service_options,
     rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::NodeDefault)
-  : ServiceBase(node_handle), any_callback_(any_callback),
+  : ServiceBase(node_base), any_callback_(any_callback),
     srv_type_support_handle_(rosidl_typesupport_cpp::get_service_type_support_handle<ServiceT>())
   {
     // rcl does the static memory allocation here
@@ -373,7 +373,7 @@ public:
 
     rcl_ret_t ret = rcl_service_init(
       service_handle_.get(),
-      node_handle.get(),
+      node_handle_.get(),
       srv_type_support_handle_,
       service_name.c_str(),
       &service_options);
@@ -421,7 +421,7 @@ public:
     std::shared_ptr<rcl_service_t> service_handle,
     AnyServiceCallback<ServiceT> any_callback,
     rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::NodeDefault)
-  : ServiceBase(node_handle), any_callback_(any_callback),
+  : ServiceBase(node_base), any_callback_(any_callback),
     srv_type_support_handle_(rosidl_typesupport_cpp::get_service_type_support_handle<ServiceT>())
   {
     // check if service handle was initialized
@@ -463,7 +463,7 @@ public:
     rcl_service_t * service_handle,
     AnyServiceCallback<ServiceT> any_callback,
     rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::NodeDefault)
-  : ServiceBase(node_handle), any_callback_(any_callback),
+  : ServiceBase(node_base), any_callback_(any_callback),
     srv_type_support_handle_(rosidl_typesupport_cpp::get_service_type_support_handle<ServiceT>())
   {
     // check if service handle was initialized

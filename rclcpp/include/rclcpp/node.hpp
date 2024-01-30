@@ -268,7 +268,8 @@ public:
   create_client(
     const std::string & service_name,
     const rmw_qos_profile_t & qos_profile,
-    rclcpp::CallbackGroup::SharedPtr group = nullptr);
+    rclcpp::CallbackGroup::SharedPtr group = nullptr,
+    rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::NodeDefault);
 
   /// Create and return a Client.
   /**
@@ -302,7 +303,8 @@ public:
     const std::string & service_name,
     CallbackT && callback,
     const rmw_qos_profile_t & qos_profile,
-    rclcpp::CallbackGroup::SharedPtr group = nullptr);
+    rclcpp::CallbackGroup::SharedPtr group = nullptr,
+    rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::NodeDefault);
 
   /// Create and return a Service.
   /**
