@@ -64,30 +64,6 @@ IntraProcessManager::add_publisher(
 }
 
 uint64_t
-IntraProcessManager::add_subscription(SubscriptionIntraProcessBase::SharedPtr subscription)
-{
-  std::unique_lock<std::shared_timed_mutex> lock(mutex_);
-
-  uint64_t sub_id = IntraProcessManager::get_next_unique_id();
-
-  subscriptions_[sub_id] = subscription;
-
-  // adds the subscription id to all the matchable publishers
-  for (auto & pair : publishers_) {
-    auto publisher = pair.second.lock();
-    if (!publisher) {
-      continue;
-    }
-    if (can_communicate(publisher, subscription)) {
-      uint64_t pub_id = pair.first;
-      insert_sub_id_for_pub(sub_id, pub_id, subscription->use_take_shared_method());
-    }
-  }
-
-  return sub_id;
-}
-
-uint64_t
 IntraProcessManager::add_intra_process_client(ClientIntraProcessBase::SharedPtr client)
 {
   std::unique_lock<std::shared_timed_mutex> lock(mutex_);
