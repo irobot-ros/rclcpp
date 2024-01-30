@@ -345,10 +345,6 @@ public:
     return qos_profile.durability() == rclcpp::DurabilityPolicy::TransientLocal;
   }
 
-  virtual
-  size_t
-  available_capacity() const = 0;
-
   rclcpp::QoS qos_profile;
   std::string topic_name;
 };

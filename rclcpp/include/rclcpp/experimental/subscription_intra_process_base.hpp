@@ -63,11 +63,6 @@ public:
   add_to_wait_set(rcl_wait_set_t * wait_set) override;
 
   RCLCPP_PUBLIC
-  virtual
-  size_t
-  available_capacity() const = 0;
-
-  RCLCPP_PUBLIC
   bool
   is_durability_transient_local() const;
 
