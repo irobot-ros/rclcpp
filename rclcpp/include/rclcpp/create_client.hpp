@@ -46,13 +46,15 @@ create_client(
   std::shared_ptr<node_interfaces::NodeServicesInterface> node_services,
   const std::string & service_name,
   const rclcpp::QoS & qos = rclcpp::ServicesQoS(),
-  rclcpp::CallbackGroup::SharedPtr group = nullptr)
+  rclcpp::CallbackGroup::SharedPtr group = nullptr,
+  rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::NodeDefault)
 {
   return create_client<ServiceT>(
     node_base, node_graph, node_services,
     service_name,
     qos.get_rmw_qos_profile(),
-    group);
+    group,
+    ipc_setting);
 }
 
 /// Create a service client with a given type.

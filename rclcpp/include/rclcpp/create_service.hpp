@@ -46,11 +46,12 @@ create_service(
   const std::string & service_name,
   CallbackT && callback,
   const rclcpp::QoS & qos,
-  rclcpp::CallbackGroup::SharedPtr group)
+  rclcpp::CallbackGroup::SharedPtr group,
+  rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::NodeDefault)
 {
   return create_service<ServiceT, CallbackT>(
     node_base, node_services, service_name,
-    std::forward<CallbackT>(callback), qos.get_rmw_qos_profile(), group);
+    std::forward<CallbackT>(callback), qos.get_rmw_qos_profile(), group, ipc_setting);
 }
 
 /// Create a service with a given type.
