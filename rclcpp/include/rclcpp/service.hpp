@@ -593,16 +593,18 @@ public:
 
     // Expand the given service name.
     char * remapped_service_name = NULL;
+    rcl_allocator_t allocator = rcl_get_default_allocator();
 
     rcl_ret_t ret = rcl_node_resolve_name(
       this->get_rcl_node_handle(),
       this->get_service_name(),
-      rcl_get_default_allocator(),
+      allocator,
       true,
       false,
       &remapped_service_name);
 
     if (RCL_RET_OK != ret) {
+      allocator.deallocate(remapped_service_name, allocator.state);
       rclcpp::exceptions::throw_from_rcl_error(ret, "service failed to resolve service name");
     }
 
@@ -612,6 +614,8 @@ public:
       context_,
       remapped_service_name,
       qos_profile);
+
+    allocator.deallocate(remapped_service_name, allocator.state);
 
     using rclcpp::experimental::IntraProcessManager;
     auto ipm = context_->get_sub_context<IntraProcessManager>();
