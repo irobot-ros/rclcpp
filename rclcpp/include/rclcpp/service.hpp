@@ -545,8 +545,12 @@ public:
   void
   send_response(rmw_request_id_t & req_id, typename ServiceT::Response & response)
   {
-    if (use_intra_process_)
-    {
+    if (!use_intra_process_ && req_id.from_intra_process) {
+      throw std::invalid_argument(
+        "intraprocess request incompatible with non-intraprocess service");
+    }
+
+    if (use_intra_process_ && req_id.from_intra_process) {
       auto intra_response = std::make_shared<typename ServiceT::Response>(response);
       // The sequence number here is used as a proxy for the intra-process client ID
       service_intra_process_->send_response(req_id.sequence_number, intra_response);
