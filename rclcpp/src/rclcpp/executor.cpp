@@ -673,6 +673,7 @@ void
 Executor::execute_service(rclcpp::ServiceBase::SharedPtr service)
 {
   auto request_header = service->create_request_header();
+  request_header->from_intra_process = false;
   std::shared_ptr<void> request = service->create_request();
   take_and_do_error_handling(
     "taking a service server request from service",
