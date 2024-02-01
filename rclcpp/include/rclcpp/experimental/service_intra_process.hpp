@@ -160,6 +160,7 @@ public:
     // we are overloading the rmw_request_id semantics to provide the intra process client ID.
     auto req_id = std::make_shared<rmw_request_id_t>();
     req_id->sequence_number = intra_process_client_id;
+    req_id->from_intra_process = true;
 
     SharedResponse response = any_callback_.dispatch(serv_handle, req_id, std::move(typed_request));
 
