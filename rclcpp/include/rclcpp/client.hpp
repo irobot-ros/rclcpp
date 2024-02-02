@@ -967,10 +967,29 @@ protected:
     // Create a ClientIntraProcess which will be given to the intra-process manager.
     using ClientIntraProcessT = rclcpp::experimental::ClientIntraProcess<ServiceT>;
 
+    // Expand the given service name.
+    char * remapped_service_name = NULL;
+    rcl_allocator_t allocator = rcl_get_default_allocator();
+
+    rcl_ret_t ret = rcl_node_resolve_name(
+      this->get_rcl_node_handle(),
+      this->get_service_name(),
+      allocator,
+      true,
+      false,
+      &remapped_service_name);
+
+    if (RCL_RET_OK != ret) {
+      allocator.deallocate(remapped_service_name, allocator.state);
+      rclcpp::exceptions::throw_from_rcl_error(ret, "client failed to resolve service name");
+    }
+
     client_intra_process_ = std::make_shared<ClientIntraProcessT>(
       context_,
-      this->get_service_name(),
+      remapped_service_name,
       qos_profile);
+
+    allocator.deallocate(remapped_service_name, allocator.state);
 
     // Add it to the intra process manager.
     using rclcpp::experimental::IntraProcessManager;

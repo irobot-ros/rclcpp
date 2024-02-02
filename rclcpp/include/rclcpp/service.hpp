@@ -594,12 +594,32 @@ public:
     // Create a ServiceIntraProcess which will be given to the intra-process manager.
     using ServiceIntraProcessT = rclcpp::experimental::ServiceIntraProcess<ServiceT>;
 
+
+    // Expand the given service name.
+    char * remapped_service_name = NULL;
+    rcl_allocator_t allocator = rcl_get_default_allocator();
+
+    rcl_ret_t ret = rcl_node_resolve_name(
+      this->get_rcl_node_handle(),
+      this->get_service_name(),
+      allocator,
+      true,
+      false,
+      &remapped_service_name);
+
+    if (RCL_RET_OK != ret) {
+      allocator.deallocate(remapped_service_name, allocator.state);
+      rclcpp::exceptions::throw_from_rcl_error(ret, "service failed to resolve service name");
+    }
+
     service_intra_process_ = std::make_shared<ServiceIntraProcessT>(
       this->shared_from_this(),
       any_callback_,
       context_,
-      this->get_service_name(),
+      remapped_service_name,
       qos_profile);
+
+    allocator.deallocate(remapped_service_name, allocator.state);
 
     using rclcpp::experimental::IntraProcessManager;
     auto ipm = context_->get_sub_context<IntraProcessManager>();
@@ -645,7 +665,6 @@ private:
   // of the appropriate ServiceT type, the template class is stored
   // as opposed to the base class which has no knowledge of ServiceT.
   std::shared_ptr<rclcpp::experimental::ServiceIntraProcess<ServiceT>> service_intra_process_;
-
 };
 
 }  // namespace rclcpp
