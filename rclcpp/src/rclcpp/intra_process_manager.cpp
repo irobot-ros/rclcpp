@@ -230,8 +230,11 @@ IntraProcessManager::get_action_client_id_from_goal_uuid(size_t uuid)
   auto iter = clients_uuid_to_id_.find(uuid);
 
   if (iter == clients_uuid_to_id_.end()) {
-    throw std::runtime_error(
-            "No ipc action clients stored with this UUID.");
+    RCLCPP_WARN(
+      rclcpp::get_logger("rclcpp"),
+      "No action clients match the specified goal UUID: %ld", uuid);
+
+    return 0;
   }
 
   return iter->second;
@@ -438,6 +441,9 @@ IntraProcessManager::get_action_client_intra_process(
 
   auto client_it = action_clients_.find(intra_process_action_client_id);
   if (client_it == action_clients_.end()) {
+    RCLCPP_WARN(
+      rclcpp::get_logger("rclcpp"),
+      "No action clients match the specified ID: %ld", intra_process_action_client_id);
     return nullptr;
   } else {
     auto client = client_it->second.lock();
@@ -445,6 +451,9 @@ IntraProcessManager::get_action_client_intra_process(
       return client;
     } else {
       action_clients_.erase(client_it);
+      RCLCPP_WARN(
+        rclcpp::get_logger("rclcpp"),
+        "Action client out of scope. ID: %ld", intra_process_action_client_id);
       return nullptr;
     }
   }

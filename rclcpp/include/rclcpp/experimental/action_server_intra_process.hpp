@@ -102,6 +102,10 @@ public:
   {
     (void)wait_set;
 
+    goal_request_ready_ = goal_request_buffer_->has_data();
+    cancel_request_ready_ = cancel_request_buffer_->has_data();
+    result_request_ready_ = result_request_buffer_->has_data();
+
     return goal_request_ready_ ||
            cancel_request_ready_ ||
            result_request_ready_ ||
@@ -114,8 +118,8 @@ public:
   {
     goal_request_buffer_->add(
       std::make_pair(ipc_action_client_id, std::move(goal_request)));
+
     gc_.trigger();
-    goal_request_ready_ = true;
     invoke_on_ready_callback(EventType::GoalRequest);
   }
 
@@ -125,8 +129,8 @@ public:
   {
     result_request_buffer_->add(
       std::make_pair(ipc_action_client_id, std::move(result_request)));
+
     gc_.trigger();
-    result_request_ready_ = true;
     invoke_on_ready_callback(EventType::ResultRequest);
   }
 
@@ -136,32 +140,30 @@ public:
   {
     cancel_request_buffer_->add(
       std::make_pair(ipc_action_client_id, std::move(cancel_request)));
+
     gc_.trigger();
-    cancel_request_ready_ = true;
     invoke_on_ready_callback(EventType::CancelGoal);
   }
 
   std::shared_ptr<void>
   take_data() override
   {
+    std::shared_ptr<void> data;
+
     if (goal_request_ready_) {
-      auto data = std::make_shared<GoalRequestDataPair>(
-        std::move(goal_request_buffer_->consume()));
-      return std::static_pointer_cast<void>(data);
-    } else if (cancel_request_ready_) {
-      auto data = std::make_shared<CancelRequestDataPair>(
-        std::move(cancel_request_buffer_->consume()));
-      return std::static_pointer_cast<void>(data);
-    } else if (result_request_ready_) {
-      auto data = std::make_shared<ResultRequestDataPair>(
-        std::move(result_request_buffer_->consume()));
-      return std::static_pointer_cast<void>(data);
-    } else if (goal_expired_) {
-      return nullptr;
-    } else {
-      throw std::runtime_error("Taking data from action server but nothing is ready");
+        data = std::make_shared<GoalRequestDataPair>(
+          std::move(goal_request_buffer_->consume()));
     }
-    return nullptr;
+    else if (cancel_request_ready_) {
+        data = std::make_shared<CancelRequestDataPair>(
+          std::move(cancel_request_buffer_->consume()));
+    }
+    else if (result_request_ready_) {
+        data = std::make_shared<ResultRequestDataPair>(
+          std::move(result_request_buffer_->consume()));
+    }
+
+    return data;
   }
 
   std::shared_ptr<void>
@@ -170,13 +172,13 @@ public:
     // Mark as ready the event type from which we want to take data
     switch (static_cast<EventType>(id)) {
       case EventType::GoalRequest:
-        goal_request_ready_ = true;
+        goal_request_ready_ = goal_request_buffer_->has_data();
         break;
       case EventType::CancelGoal:
-        cancel_request_ready_ = true;
+        cancel_request_ready_ = cancel_request_buffer_->has_data();
         break;
       case EventType::ResultRequest:
-        result_request_ready_ = true;
+        result_request_ready_ = result_request_buffer_->has_data();
         break;
     }
 
@@ -186,22 +188,23 @@ public:
   void execute(std::shared_ptr<void> & data)
   {
     if (!data && !goal_expired_) {
-      throw std::runtime_error("'data' is empty");
+      // Empty data can happen when there were more events than elements in the ring buffer
+      return;
     }
 
-    if (goal_request_ready_) {
-      goal_request_ready_ = false;
+    if (goal_request_ready_.exchange(false)) {
       auto goal_request_data = std::static_pointer_cast<GoalRequestDataPair>(data);
       execute_goal_request_received_(std::move(goal_request_data));
-    } else if (cancel_request_ready_) {
-      cancel_request_ready_ = false;
+    }
+    else if (cancel_request_ready_.exchange(false)) {
       auto cancel_goal_data = std::static_pointer_cast<CancelRequestDataPair>(data);
       execute_cancel_request_received_(std::move(cancel_goal_data));
-    } else if (result_request_ready_) {
-      result_request_ready_ = false;
+    }
+    else if (result_request_ready_.exchange(false)) {
       auto result_request_data = std::static_pointer_cast<ResultRequestDataPair>(data);
       execute_result_request_received_(std::move(result_request_data));
-    } else if (goal_expired_) {
+    }
+    else if (goal_expired_) {
       // TODO(mauropasse): Handle goal expired case
       // execute_check_expired_goals();
     } else {
