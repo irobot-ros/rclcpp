@@ -251,60 +251,6 @@ namespace rclcpp
 {
 namespace experimental
 {
-namespace buffers
-{
-namespace mock
-{
-template<
-  typename MessageT,
-  typename Alloc = std::allocator<void>,
-  typename MessageDeleter = std::default_delete<MessageT>>
-class IntraProcessBuffer
-{
-public:
-  using ConstMessageSharedPtr = std::shared_ptr<const MessageT>;
-  using MessageUniquePtr = std::unique_ptr<MessageT>;
-
-  RCLCPP_SMART_PTR_DEFINITIONS(IntraProcessBuffer)
-
-  IntraProcessBuffer()
-  {}
-
-  void add(ConstMessageSharedPtr msg)
-  {
-    message_ptr = reinterpret_cast<std::uintptr_t>(msg.get());
-    shared_msg = msg;
-  }
-
-  void add(MessageUniquePtr msg)
-  {
-    message_ptr = reinterpret_cast<std::uintptr_t>(msg.get());
-    unique_msg = std::move(msg);
-  }
-
-  void pop(std::uintptr_t & msg_ptr)
-  {
-    msg_ptr = message_ptr;
-    message_ptr = 0;
-  }
-
-  // need to store the messages somewhere otherwise the memory address will be reused
-  ConstMessageSharedPtr shared_msg;
-  MessageUniquePtr unique_msg;
-
-  std::uintptr_t message_ptr;
-};
-
-}  // namespace mock
-}  // namespace buffers
-}  // namespace experimental
-}  // namespace rclcpp
-
-
-namespace rclcpp
-{
-namespace experimental
-{
 namespace mock
 {
 
