@@ -120,7 +120,6 @@ public:
         "Calling intra_process_service_send_response for invalid or no "
         "longer existing request id");
 
-      callback_info_.erase(client_request_id);
       return;
     }
 
