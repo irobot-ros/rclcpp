@@ -44,10 +44,11 @@ ServiceIntraProcessBase::add_intra_process_client(
   clients_[client_id] = client;
 }
 
-static std::atomic<uint64_t> _next_unique_id {1};
-
-uint64_t get_unique_request_id()
+uint64_t
+ServiceIntraProcessBase::get_unique_request_id()
 {
+  static std::atomic<uint64_t> _next_unique_id {1};
+
   auto next_id = _next_unique_id.fetch_add(1, std::memory_order_relaxed);
   // Check for rollover (we started at 1).
   if (0 == next_id) {
