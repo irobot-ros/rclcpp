@@ -194,6 +194,8 @@ protected:
     }
   }
 
+  uint64_t get_unique_request_id();
+
   using ClientMap =
     std::unordered_map<uint64_t, rclcpp::experimental::ClientIntraProcessBase::WeakPtr>;
 

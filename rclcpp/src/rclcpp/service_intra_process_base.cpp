@@ -43,3 +43,17 @@ ServiceIntraProcessBase::add_intra_process_client(
   std::unique_lock<std::recursive_mutex> lock(reentrant_mutex_);
   clients_[client_id] = client;
 }
+
+uint64_t
+ServiceIntraProcessBase::get_unique_request_id()
+{
+  static std::atomic<uint64_t> _next_unique_id {1};
+
+  auto next_id = _next_unique_id.fetch_add(1, std::memory_order_relaxed);
+  if (0 == next_id) {
+    throw std::overflow_error(
+      "exhausted the unique ids for client requests in this process "
+      "(congratulations your computer is either extremely fast or extremely old)");
+  }
+  return next_id;
+}

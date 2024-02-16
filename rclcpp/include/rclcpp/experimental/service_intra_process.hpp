@@ -108,10 +108,22 @@ public:
     return std::static_pointer_cast<void>(data);
   }
 
-  void send_response(uint64_t intra_process_client_id, SharedResponse & response)
+  void send_response(int64_t client_request_id, SharedResponse & response)
   {
     std::unique_lock<std::recursive_mutex> lock(reentrant_mutex_);
 
+    auto client_request_it = callback_info_.find(client_request_id);
+
+    if (client_request_it == callback_info_.end()) {
+      RCLCPP_WARN(
+        rclcpp::get_logger("rclcpp"),
+        "Calling intra_process_service_send_response for invalid or no "
+        "longer existing request id");
+
+      return;
+    }
+
+    auto intra_process_client_id = client_request_it->second.first;
     auto client_it = clients_.find(intra_process_client_id);
 
     if (client_it == clients_.end()) {
@@ -120,7 +132,7 @@ public:
         "Calling intra_process_service_send_response for invalid or no "
         "longer existing client id");
 
-      callback_info_.erase(intra_process_client_id);
+      callback_info_.erase(client_request_id);
       return;
     }
 
@@ -130,14 +142,14 @@ public:
       auto client = std::dynamic_pointer_cast<
         rclcpp::experimental::ClientIntraProcess<ServiceT>>(
         client_intra_process_base);
-      CallbackInfoVariant & value = callback_info_[intra_process_client_id];
+      CallbackInfoVariant & value = client_request_it->second.second;
       client->store_intra_process_response(
         std::make_pair(std::move(response), std::move(value)));
     } else {
       clients_.erase(client_it);
     }
 
-    callback_info_.erase(intra_process_client_id);
+    callback_info_.erase(client_request_id);
   }
 
   void execute(const std::shared_ptr<void> & data)
@@ -154,18 +166,20 @@ public:
     uint64_t intra_process_client_id = ptr->first;
     SharedRequest & typed_request = ptr->second.first;
     CallbackInfoVariant & value = ptr->second.second;
-    callback_info_.emplace(std::make_pair(intra_process_client_id, std::move(value)));
 
     // To allow for the user callback to handle deferred responses for IPC in an ambiguous way,
     // we are overloading the rmw_request_id semantics to provide the intra process client ID.
+    uint64_t client_request_id = get_unique_request_id();
     auto req_id = std::make_shared<rmw_request_id_t>();
-    req_id->sequence_number = intra_process_client_id;
+    req_id->sequence_number = client_request_id;
     req_id->from_intra_process = true;
+
+    callback_info_.emplace(std::make_pair(req_id->sequence_number, std::make_pair(intra_process_client_id, std::move(value))));
 
     SharedResponse response = any_callback_.dispatch(serv_handle, req_id, std::move(typed_request));
 
     if (response) {
-      send_response(intra_process_client_id, response);
+      send_response(req_id->sequence_number, response);
     }
   }
 
@@ -182,7 +196,7 @@ protected:
 
   // Store callback variants in a map to support deferred response
   // access by intra-process client id.
-  std::unordered_map<uint64_t, CallbackInfoVariant> callback_info_;
+  std::unordered_map<int64_t, std::pair<uint64_t, CallbackInfoVariant>> callback_info_;
 };
 
 }  // namespace experimental
