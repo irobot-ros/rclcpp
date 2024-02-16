@@ -43,3 +43,26 @@ ServiceIntraProcessBase::add_intra_process_client(
   std::unique_lock<std::recursive_mutex> lock(reentrant_mutex_);
   clients_[client_id] = client;
 }
+
+static std::atomic<uint64_t> _next_unique_id {1};
+
+uint64_t get_unique_request_id()
+{
+  auto next_id = _next_unique_id.fetch_add(1, std::memory_order_relaxed);
+  // Check for rollover (we started at 1).
+  if (0 == next_id) {
+    // This puts a technical limit on the number of times you can add a publisher or subscriber.
+    // But even if you could add (and remove) them at 1 kHz (very optimistic rate)
+    // it would still be a very long time before you could exhaust the pool of id's:
+    //   2^64 / 1000 times per sec / 60 sec / 60 min / 24 hours / 365 days = 584,942,417 years
+    // So around 585 million years. Even at 1 GHz, it would take 585 years.
+    // I think it's safe to avoid trying to handle overflow.
+    // If we roll over then it's most likely a bug.
+    // *INDENT-OFF* (prevent uncrustify from making unnecessary indents here)
+    throw std::overflow_error(
+      "exhausted the unique id's for publishers and subscribers in this process "
+      "(congratulations your computer is either extremely fast or extremely old)");
+    // *INDENT-ON*
+  }
+  return next_id;
+}
