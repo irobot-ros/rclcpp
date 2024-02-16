@@ -52,7 +52,7 @@ ServiceIntraProcessBase::get_unique_request_id()
   auto next_id = _next_unique_id.fetch_add(1, std::memory_order_relaxed);
   if (0 == next_id) {
     throw std::overflow_error(
-      "exhausted the unique id's for request ids in this process "
+      "exhausted the unique ids for client requests in this process "
       "(congratulations your computer is either extremely fast or extremely old)");
   }
   return next_id;
