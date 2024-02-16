@@ -114,7 +114,7 @@ public:
 
     auto client_request_it = callback_info_.find(client_request_id);
 
-    if (client_request_it == client_request_it.end()) {
+    if (client_request_it == callback_info_.end()) {
       RCLCPP_WARN(
         rclcpp::get_logger("rclcpp"),
         "Calling intra_process_service_send_response for invalid or no "
