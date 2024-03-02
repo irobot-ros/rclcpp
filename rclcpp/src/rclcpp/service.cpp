@@ -37,8 +37,6 @@ ServiceBase::ServiceBase(
 
 ServiceBase::~ServiceBase()
 {
-  clear_on_new_request_callback();
-
   std::lock_guard<std::recursive_mutex> lock(ipc_mutex_);
   if (!use_intra_process_) {
     return;
