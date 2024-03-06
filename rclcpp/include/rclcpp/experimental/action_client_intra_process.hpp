@@ -217,7 +217,7 @@ public:
       data = std::move(feedback_buffer_->consume());
     }
     else if (is_status_ready_) {
-      data = std::move(status_buffer_->consume());
+      data = status_buffer_->consume();
     }
 
     // Data could be null if there were more events than elements in the buffer
@@ -280,7 +280,7 @@ public:
 
   bool is_any_response_ready()
   {
-    // Extract all elements from the buffer, we don't know which one is ready
+    // Extract all elements from the buffer
     std::vector<ResultResponsePairSharedPtr> responses;
     while(result_response_buffer_->has_data()) {
       responses.emplace_back(std::move(result_response_buffer_->consume()));

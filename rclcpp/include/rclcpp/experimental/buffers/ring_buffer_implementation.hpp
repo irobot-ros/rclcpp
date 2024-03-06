@@ -62,7 +62,7 @@ public:
    *
    * \param request the element to be stored in the ring buffer
    */
-  void enqueue(BufferT request)
+  void enqueue(BufferT request) override
   {
     std::lock_guard<std::mutex> lock(mutex_);
 
@@ -82,7 +82,7 @@ public:
    *
    * \return the element that is being removed from the ring buffer
    */
-  BufferT dequeue()
+  BufferT dequeue() override
   {
     std::lock_guard<std::mutex> lock(mutex_);
 
@@ -128,7 +128,7 @@ public:
    *
    * \return `true` if there is data and `false` otherwise
    */
-  inline bool has_data() const
+  inline bool has_data() const override
   {
     std::lock_guard<std::mutex> lock(mutex_);
     return has_data_();
@@ -147,7 +147,7 @@ public:
     return is_full_();
   }
 
-  void clear() {}
+  void clear() override {}
 
 private:
   /// Get the next index value for the ring buffer

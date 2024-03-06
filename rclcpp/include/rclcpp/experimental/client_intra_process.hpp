@@ -76,7 +76,7 @@ public:
   virtual ~ClientIntraProcess() = default;
 
   bool
-  is_ready(rcl_wait_set_t * wait_set)
+  is_ready(rcl_wait_set_t * wait_set) override
   {
     (void) wait_set;
     return buffer_->has_data();
@@ -97,7 +97,7 @@ public:
     return std::static_pointer_cast<void>(data);
   }
 
-  void execute(std::shared_ptr<void> & data)
+  void execute(std::shared_ptr<void> & data) override
   {
     if (!data) {
       throw std::runtime_error("'data' is empty");
