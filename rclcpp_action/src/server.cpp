@@ -569,18 +569,6 @@ ServerBase::execute_result_request_received(std::shared_ptr<void> & data)
   data.reset();
 }
 
-// Todo: Use an intra-process way to store goal_results, when using IPC
-std::shared_ptr<void>
-ServerBase::get_result_response(GoalUUID uuid)
-{
-  std::lock_guard<std::recursive_mutex> lock(pimpl_->unordered_map_mutex_);
-  auto iter = pimpl_->goal_results_.find(uuid);
-  if (iter != pimpl_->goal_results_.end()) {
-    return iter->second;
-  }
-  return nullptr;
-}
-
 void
 ServerBase::execute_check_expired_goals()
 {
@@ -889,8 +877,6 @@ ServerBase::setup_intra_process(
 rclcpp::Waitable::SharedPtr
 ServerBase::get_intra_process_waitable()
 {
-  std::lock_guard<std::recursive_mutex> lock(ipc_mutex_);
-
   // If not using intra process, shortcut to nullptr.
   if (!use_intra_process_) {
     return nullptr;

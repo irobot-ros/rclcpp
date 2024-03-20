@@ -149,8 +149,10 @@ public:
   }
 
 protected:
-  std::recursive_mutex reentrant_mutex_;
   rclcpp::GuardCondition gc_;
+  std::string action_name_;
+  QoS qos_profile_;
+  std::recursive_mutex reentrant_mutex_;
 
   // Map the different action server event types to their unread count.
   std::unordered_map<EventType, size_t> event_type_to_unread_count_;
@@ -179,11 +181,6 @@ protected:
         event_type_to_unread_count_[event_type] = 1;
     }
   }
-
-private:
-  std::string action_name_;
-  QoS qos_profile_;
-
 };
 
 }  // namespace experimental
