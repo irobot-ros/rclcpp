@@ -558,7 +558,8 @@ public:
   void
   intra_process_action_send_goal_request(
     uint64_t ipc_action_client_id,
-    RequestT goal_request)
+    RequestT goal_request,
+    size_t goal_id)
   {
     auto service = get_matching_intra_process_action_server<ActionT>(ipc_action_client_id);
 
@@ -566,6 +567,9 @@ public:
       service->store_ipc_action_goal_request(
         ipc_action_client_id, std::move(goal_request));
     }
+
+    std::unique_lock<std::shared_timed_mutex> lock(mutex_);
+    clients_uuid_to_id_[goal_id] = ipc_action_client_id;
   }
 
   /// Send an intra-process action client cancel request

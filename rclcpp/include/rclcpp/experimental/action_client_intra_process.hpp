@@ -81,11 +81,13 @@ public:
     const std::string & action_name,
     const rcl_action_client_depth_t & qos_history,
     ResponseCallback goal_status_callback,
-    ResponseCallback feedback_callback)
+    ResponseCallback feedback_callback,
+    std::recursive_mutex & reentrant_mutex)
   : ActionClientIntraProcessBase(
       context,
       action_name,
-      QoS(qos_history.goal_service_depth))
+      QoS(qos_history.goal_service_depth),
+      reentrant_mutex)
   {
     // Create the intra-process buffers
     goal_response_buffer_ =
@@ -119,7 +121,7 @@ public:
     (void) wait_set;
 
     is_goal_response_ready_ = goal_response_buffer_->has_data();
-    is_result_response_ready_ = is_any_response_ready();
+    is_result_response_ready_ = result_response_buffer_->has_data();
     is_cancel_response_ready_ = cancel_response_buffer_->has_data();
     is_feedback_ready_ = feedback_buffer_->has_data();
     is_status_ready_ = status_buffer_->has_data();
@@ -145,7 +147,6 @@ public:
   void store_result_response_callback(size_t goal_id, ResponseCallback callback)
   {
     set_response_callback_to_event_type(EventType::ResultResponse, callback, goal_id);
-    gc_.trigger();
   }
 
   // Store responses from server
@@ -208,7 +209,7 @@ public:
       data = std::move(goal_response_buffer_->consume());
     }
     else if (is_result_response_ready_) {
-      data = take_first_response_ready();
+      data = std::move(result_response_buffer_->consume());
     }
     else if (is_cancel_response_ready_) {
       data = std::move(cancel_response_buffer_->consume());
@@ -230,7 +231,7 @@ public:
     // Mark as ready the event type from which we want to take data
     switch (static_cast<EventType>(id)) {
       case EventType::ResultResponse:
-        is_result_response_ready_ = is_any_response_ready();
+        is_result_response_ready_ = result_response_buffer_->has_data();
         break;
       case EventType::CancelResponse:
         is_cancel_response_ready_ = cancel_response_buffer_->has_data();
@@ -247,58 +248,6 @@ public:
     }
 
     return take_data();
-  }
-
-  std::shared_ptr<void> take_first_response_ready()
-  {
-    // Extract all elements from the buffer, we don't know which one is ready
-    std::vector<ResultResponsePairSharedPtr> responses;
-    while(result_response_buffer_->has_data()) {
-      responses.emplace_back(std::move(result_response_buffer_->consume()));
-    }
-
-    ResultResponsePairSharedPtr ready_response;
-
-    for (auto & response : responses) {
-      auto goal_id = response->first;
-      // Get the first response which "is ready", meaning that we have
-      // the response callback to process the event
-      if (!ready_response && goal_has_response_callback(goal_id)) {
-        ready_response = std::move(response);
-      } else {
-        // Not ready, re-add to the buffer
-        result_response_buffer_->add(std::move(response));
-      }
-    }
-
-    if (!ready_response) {
-      throw std::runtime_error("No ready responses!");
-    }
-
-    return std::move(ready_response);
-  }
-
-  bool is_any_response_ready()
-  {
-    // Extract all elements from the buffer
-    std::vector<ResultResponsePairSharedPtr> responses;
-    while(result_response_buffer_->has_data()) {
-      responses.emplace_back(std::move(result_response_buffer_->consume()));
-    }
-
-    bool response_is_ready = false;
-
-    for (auto & response : responses) {
-      auto goal_id = response->first;
-      // Check if response "is ready", meaning that we have
-      // the response callback to process the event
-      if (goal_has_response_callback(goal_id)) {
-        response_is_ready = true;
-      }
-      result_response_buffer_->add(std::move(response));
-    }
-
-    return response_is_ready;
   }
 
   void execute(std::shared_ptr<void> & data)

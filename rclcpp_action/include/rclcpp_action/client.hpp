@@ -336,7 +336,6 @@ protected:
   std::unordered_map<EntityType, std::function<void(size_t)>> entity_type_to_on_ready_callback_;
 
   // Intra-process action client data fields
-  std::recursive_mutex ipc_mutex_;
   bool use_intra_process_{false};
   IntraProcessManagerWeakPtr weak_ipm_;
   uint64_t ipc_action_client_id_;
@@ -487,7 +486,7 @@ public:
         std::shared_ptr<GoalHandle> goal_handle(
           new GoalHandle(goal_info, options.feedback_callback, options.result_callback));
         {
-          std::lock_guard<std::mutex> guard(goal_handles_mutex_);
+          std::lock_guard<std::recursive_mutex> guard(goal_handles_mutex_);
           goal_handles_[goal_handle->get_goal_id()] = goal_handle;
         }
         promise->set_value(goal_handle);
@@ -501,8 +500,6 @@ public:
       };
 
     bool intra_process_send_done = false;
-
-    std::lock_guard<std::recursive_mutex> lock(ipc_mutex_);
 
     if (use_intra_process_) {
       auto ipm = weak_ipm_.lock();
@@ -521,7 +518,8 @@ public:
 
         ipm->intra_process_action_send_goal_request<ActionT>(
           ipc_action_client_id_,
-          std::move(goal_request));
+          std::move(goal_request),
+          hashed_guuid);
 
         intra_process_send_done = true;
       }
@@ -544,16 +542,16 @@ public:
   // with no more user references
   void clear_expired_goals()
   {
-    std::lock_guard<std::mutex> guard(goal_handles_mutex_);
+    std::lock_guard<std::recursive_mutex> guard(goal_handles_mutex_);
     auto goal_handle_it = goal_handles_.begin();
     while (goal_handle_it != goal_handles_.end()) {
       if (!goal_handle_it->second.lock()) {
+        size_t hashed_guuid = std::hash<GoalUUID>()(goal_handle_it->first);
+
         RCLCPP_DEBUG(
           this->get_logger(),
           "Dropping weak reference to goal handle during send_goal()");
         goal_handle_it = goal_handles_.erase(goal_handle_it);
-
-        size_t hashed_guuid = std::hash<GoalUUID>()(goal_handle_it->first);
 
         if (use_intra_process_) {
           ipc_action_client_->erase_goal_info(hashed_guuid);
@@ -577,7 +575,7 @@ public:
     typename GoalHandle::SharedPtr goal_handle,
     ResultCallback result_callback = nullptr)
   {
-    std::lock_guard<std::mutex> lock(goal_handles_mutex_);
+    std::lock_guard<std::recursive_mutex> lock(goal_handles_mutex_);
     if (goal_handles_.count(goal_handle->get_goal_id()) == 0) {
       throw exceptions::UnknownGoalHandleError();
     }
@@ -612,7 +610,7 @@ public:
     typename GoalHandle::SharedPtr goal_handle,
     CancelCallback cancel_callback = nullptr)
   {
-    std::lock_guard<std::mutex> lock(goal_handles_mutex_);
+    std::lock_guard<std::recursive_mutex> lock(goal_handles_mutex_);
     if (goal_handles_.count(goal_handle->get_goal_id()) == 0) {
       throw exceptions::UnknownGoalHandleError();
     }
@@ -671,7 +669,7 @@ public:
   virtual
   ~Client()
   {
-    std::lock_guard<std::mutex> guard(goal_handles_mutex_);
+    std::lock_guard<std::recursive_mutex> guard(goal_handles_mutex_);
     auto it = goal_handles_.begin();
     while (it != goal_handles_.end()) {
       typename GoalHandle::SharedPtr goal_handle = it->second.lock();
@@ -731,7 +729,7 @@ private:
   void
   handle_feedback_message(std::shared_ptr<void> message) override
   {
-    std::lock_guard<std::mutex> guard(goal_handles_mutex_);
+    std::lock_guard<std::recursive_mutex> guard(goal_handles_mutex_);
     using FeedbackMessage = typename ActionT::Impl::FeedbackMessage;
     typename FeedbackMessage::SharedPtr feedback_message =
       std::static_pointer_cast<FeedbackMessage>(message);
@@ -768,7 +766,7 @@ private:
   void
   handle_status_message(std::shared_ptr<void> message) override
   {
-    std::lock_guard<std::mutex> guard(goal_handles_mutex_);
+    std::lock_guard<std::recursive_mutex> guard(goal_handles_mutex_);
     using GoalStatusMessage = typename ActionT::Impl::GoalStatusMessage;
     auto status_message = std::static_pointer_cast<GoalStatusMessage>(message);
     for (const GoalStatus & status : status_message->status_list) {
@@ -818,14 +816,12 @@ private:
         wrapped_result.goal_id = goal_handle->get_goal_id();
         wrapped_result.code = static_cast<ResultCode>(result_response->status);
         goal_handle->set_result(wrapped_result);
-        std::lock_guard<std::mutex> lock(goal_handles_mutex_);
+        std::lock_guard<std::recursive_mutex> lock(goal_handles_mutex_);
         goal_handles_.erase(goal_handle->get_goal_id());
       };
 
     try {
       bool intra_process_send_done = false;
-
-      std::lock_guard<std::recursive_mutex> lock(ipc_mutex_);
 
       if (use_intra_process_) {
         auto ipm = weak_ipm_.lock();
@@ -885,8 +881,6 @@ private:
       };
 
     bool intra_process_send_done = false;
-
-    std::lock_guard<std::recursive_mutex> lock(ipc_mutex_);
 
     if (use_intra_process_) {
       auto ipm = weak_ipm_.lock();
@@ -976,7 +970,8 @@ private:
       remapped_action_name,
       qos_history,
       std::bind(&Client::handle_status_message, this, std::placeholders::_1),
-      std::bind(&Client::handle_feedback_message, this, std::placeholders::_1));
+      std::bind(&Client::handle_feedback_message, this, std::placeholders::_1),
+      goal_handles_mutex_);
 
     // Add it to the intra process manager.
     using rclcpp::experimental::IntraProcessManager;
@@ -986,7 +981,7 @@ private:
   }
 
   std::map<GoalUUID, typename GoalHandle::WeakPtr> goal_handles_;
-  std::mutex goal_handles_mutex_;
+  std::recursive_mutex goal_handles_mutex_;
 
   using ActionClientIntraProcessT = rclcpp::experimental::ActionClientIntraProcess<ActionT>;
   std::shared_ptr<ActionClientIntraProcessT> ipc_action_client_;

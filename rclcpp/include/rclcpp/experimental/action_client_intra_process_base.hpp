@@ -55,10 +55,12 @@ public:
   ActionClientIntraProcessBase(
     rclcpp::Context::SharedPtr context,
     const std::string & action_name,
-    const rclcpp::QoS & qos_profile)
-  : gc_(context),
-    action_name_(action_name),
-    qos_profile_(qos_profile)
+    const rclcpp::QoS & qos_profile,
+    std::recursive_mutex & reentrant_mutex)
+  : action_name_(action_name),
+    qos_profile_(qos_profile),
+    gc_(context),
+    reentrant_mutex_(reentrant_mutex)
   {}
 
   virtual ~ActionClientIntraProcessBase() = default;
@@ -128,7 +130,7 @@ public:
               "is not callable.");
     }
 
-    reentrant_mutex_.lock();
+    std::lock_guard<std::recursive_mutex> lock(reentrant_mutex_);
     on_ready_callback_ = callback;
 
     // If we had events happened before the "on_ready" callback was set,
@@ -141,44 +143,24 @@ public:
         unread_count = 0;
       }
     }
-    reentrant_mutex_.unlock();
-
-    result_reponse_mutex_.lock();
-    result_response_on_ready_callback_ = callback;
-
-    for (auto& pair : result_response_map_) {
-      auto & unread_count = pair.second.unread_count;
-      auto & response_callback = pair.second.response_callback;
-      if (unread_count && response_callback) {
-        callback(unread_count, static_cast<int>(EventType::ResultResponse));
-        unread_count = 0;
-      }
-    }
-    result_reponse_mutex_.unlock();
   }
 
   void
   clear_on_ready_callback() override
   {
-    reentrant_mutex_.unlock();
+    std::lock_guard<std::recursive_mutex> lock(reentrant_mutex_);
     on_ready_callback_ = nullptr;
-    reentrant_mutex_.unlock();
-
-    result_reponse_mutex_.lock();
-    result_response_on_ready_callback_ = nullptr;
-    result_reponse_mutex_.unlock();
   }
 
   void erase_goal_info(size_t goal_id)
   {
-    reentrant_mutex_.unlock();
+    std::lock_guard<std::recursive_mutex> lock(reentrant_mutex_);
     event_info_multi_map_.erase(goal_id);
-    reentrant_mutex_.unlock();
-
-    result_reponse_mutex_.lock();
-    result_response_map_.erase(goal_id);
-    result_reponse_mutex_.unlock();
   }
+
+private:
+  std::string action_name_;
+  QoS qos_profile_;
 
 protected:
   rclcpp::GuardCondition gc_;
@@ -197,45 +179,17 @@ protected:
     size_t unread_count;
   };
 
-  // Mutex to protect ResultResponse callback and events info
-  std::recursive_mutex result_reponse_mutex_;
-  OnReadyCallback result_response_on_ready_callback_{nullptr};
-  std::unordered_map<size_t /*Goal ID*/, EventInfo> result_response_map_;
-
-  // Mutex to protect the rest of the event types
-  // We use two mutexes, since having just one was resulting in deadlock
-  std::recursive_mutex reentrant_mutex_;
+  // Mutex to sync operations on the client
+  std::recursive_mutex& reentrant_mutex_;
   OnReadyCallback on_ready_callback_{nullptr};
   std::unordered_multimap<size_t /*Goal ID*/, EventInfo> event_info_multi_map_;
 
   // Invoke the callback to be called when the action client has a new event
+  // If the callback hasn't been set, increase the unread count.
   void invoke_on_ready_callback(
     EventType event_type,
     size_t goal_id = 0)
   {
-    if (event_type == EventType::ResultResponse) {
-      std::lock_guard<std::recursive_mutex> lock(result_reponse_mutex_);
-
-      auto it = result_response_map_.find(goal_id);
-
-      if (it != result_response_map_.end()) {
-          auto & response_callback = it->second.response_callback;
-          if (response_callback && result_response_on_ready_callback_) {
-            result_response_on_ready_callback_(1,
-              static_cast<int>(EventType::ResultResponse));
-          } else {
-            it->second.unread_count++;
-          }
-          return;
-      }
-
-      // If no entry found, create a new one with unread_count = 1
-      EventInfo event_info{EventType::ResultResponse, nullptr, 1};
-      result_response_map_.emplace(goal_id, event_info);
-      return;
-    }
-
-    // For the rest of the event types
     std::lock_guard<std::recursive_mutex> lock(reentrant_mutex_);
 
     auto range = event_info_multi_map_.equal_range(goal_id);
@@ -255,48 +209,13 @@ protected:
     event_info_multi_map_.emplace(goal_id, event_info);
   }
 
-  // Function to set the "reseponse_callback" to the event type
   void set_response_callback_to_event_type(
     EventType event_type,
     ResponseCallback response_callback,
     size_t goal_id = 0)
   {
-    if (event_type == EventType::ResultResponse) {
-      std::lock_guard<std::recursive_mutex> lock(result_reponse_mutex_);
-
-      auto it = result_response_map_.find(goal_id);
-      if (it != result_response_map_.end()) {
-          // Set response callback
-          it->second.response_callback = response_callback;
-          // Check if we already have the response, if so call "on_ready" callback
-          auto & unread_count = it->second.unread_count;
-          if (unread_count && result_response_on_ready_callback_) {
-            result_response_on_ready_callback_(
-              unread_count, static_cast<int>(EventType::ResultResponse));
-            unread_count = 0;
-          }
-          return;
-      }
-
-      EventInfo event_info{EventType::ResultResponse, response_callback, 0};
-      result_response_map_.emplace(goal_id, event_info);
-      return;
-    }
-
-    // For the rest of the event types
     std::lock_guard<std::recursive_mutex> lock(reentrant_mutex_);
 
-    // Get the range of EventInfo matching the goal_id
-    auto range = event_info_multi_map_.equal_range(goal_id);
-
-    for (auto it = range.first; it != range.second; ++it) {
-      if (it->second.event_type == event_type) {
-        it->second.response_callback = response_callback;
-        return;
-      }
-    }
-
-    // If no entry found, create a new one.
     EventInfo event_info{event_type, response_callback, 0};
     event_info_multi_map_.emplace(goal_id, event_info);
   }
@@ -307,26 +226,6 @@ protected:
     size_t goal_id = 0,
     bool erase_event_info = true)
   {
-    if (event_type == EventType::ResultResponse) {
-      std::lock_guard<std::recursive_mutex> lock(result_reponse_mutex_);
-
-      auto it = result_response_map_.find(goal_id);
-
-      if (it != result_response_map_.end()) {
-        auto & response_callback = it->second.response_callback;
-        if (response_callback) {
-          response_callback(response);
-          result_response_map_.erase(it);
-        } else {
-          throw std::runtime_error("response_callback invalid!");
-        }
-      } else {
-        throw std::runtime_error("Goal ID not found");
-      }
-      return;
-    }
-
-    // For the rest of the event types
     std::lock_guard<std::recursive_mutex> lock(reentrant_mutex_);
 
     auto range = event_info_multi_map_.equal_range(goal_id);
@@ -348,25 +247,6 @@ protected:
       }
     }
   }
-
-  bool goal_has_response_callback(size_t goal_id)
-  {
-    std::lock_guard<std::recursive_mutex> lock(result_reponse_mutex_);
-
-    auto it = result_response_map_.find(goal_id);
-
-    if (it != result_response_map_.end()) {
-      if(it->second.response_callback) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-private:
-  std::string action_name_;
-  QoS qos_profile_;
 };
 
 }  // namespace experimental
