@@ -605,6 +605,8 @@ protected:
     GoalUUID uuid = get_goal_id_from_result_request(result_request.get());
     size_t hashed_uuid = std::hash<GoalUUID>()(uuid);
 
+    std::lock_guard<std::recursive_mutex> lock(goal_handles_mutex_);
+
     ResultResponseSharedPtr result_response = get_result_response(hashed_uuid);
 
     // Check if a result is already available. If not, it will
