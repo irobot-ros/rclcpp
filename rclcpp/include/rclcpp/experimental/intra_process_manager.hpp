@@ -553,23 +553,26 @@ public:
    *
    * \param ipc_action_client_id the id of the action client sending the goal request
    * \param goal_request the action client's goal request data.
+   * \return `true` if valid server and intra-process send was successful.
    */
   template<typename ActionT, typename RequestT>
-  void
+  bool
   intra_process_action_send_goal_request(
     uint64_t ipc_action_client_id,
     RequestT goal_request,
     size_t goal_id)
   {
-    auto service = get_matching_intra_process_action_server<ActionT>(ipc_action_client_id);
+    auto server = get_matching_intra_process_action_server<ActionT>(ipc_action_client_id);
 
-    if (service) {
-      service->store_ipc_action_goal_request(
+    if (server) {
+      server->store_ipc_action_goal_request(
         ipc_action_client_id, std::move(goal_request));
-    }
 
-    std::unique_lock<std::shared_timed_mutex> lock(mutex_);
-    clients_uuid_to_id_[goal_id] = ipc_action_client_id;
+      std::unique_lock<std::shared_timed_mutex> lock(mutex_);
+      clients_uuid_to_id_[goal_id] = ipc_action_client_id;
+      return true;
+    }
+    return false;
   }
 
   /// Send an intra-process action client cancel request
@@ -579,19 +582,22 @@ public:
    *
    * \param ipc_action_client_id the id of the action client sending the cancel request
    * \param cancel_request the action client's cancel request data.
+   * \return `true` if valid server and intra-process send was successful.
    */
   template<typename ActionT, typename CancelT>
-  void
+  bool
   intra_process_action_send_cancel_request(
     uint64_t ipc_action_client_id,
     CancelT cancel_request)
   {
-    auto service = get_matching_intra_process_action_server<ActionT>(ipc_action_client_id);
+    auto server = get_matching_intra_process_action_server<ActionT>(ipc_action_client_id);
 
-    if (service) {
-      service->store_ipc_action_cancel_request(
+    if (server) {
+      server->store_ipc_action_cancel_request(
         ipc_action_client_id, std::move(cancel_request));
+      return true;
     }
+    return false;
   }
 
   /// Send an intra-process action client result request
@@ -601,19 +607,22 @@ public:
    *
    * \param ipc_action_client_id the id of the action client sending the result request
    * \param result_request the action client's result request data.
+   * \return `true` if valid server and intra-process send was successful.
    */
   template<typename ActionT, typename RequestT>
-  void
+  bool
   intra_process_action_send_result_request(
     uint64_t ipc_action_client_id,
     RequestT result_request)
   {
-    auto service = get_matching_intra_process_action_server<ActionT>(ipc_action_client_id);
+    auto server = get_matching_intra_process_action_server<ActionT>(ipc_action_client_id);
 
-    if (service) {
-      service->store_ipc_action_result_request(
+    if (server) {
+      server->store_ipc_action_result_request(
         ipc_action_client_id, std::move(result_request));
+      return true;
     }
+    return false;
   }
 
   /// Send an intra-process action server goal response
