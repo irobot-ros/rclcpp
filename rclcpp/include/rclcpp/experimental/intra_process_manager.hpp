@@ -402,23 +402,35 @@ public:
     if (service_it == services_.end()) {
       auto cli = get_client_intra_process(intra_process_client_id);
       auto warning_msg =
-        "Intra-process service gone out of scope. "
+        "Intra-process service not found. "
         "Do inter-process requests.\n"
         "Client service name: " + std::string(cli->get_service_name());
       RCLCPP_WARN(rclcpp::get_logger("rclcpp"), warning_msg.c_str());
       return;
     }
     auto service_intra_process_base = service_it->second.lock();
-    if (service_intra_process_base) {
-      auto service = std::dynamic_pointer_cast<
-        rclcpp::experimental::ServiceIntraProcess<ServiceT>>(service_intra_process_base);
-      if (service) {
-        service->store_intra_process_request(
-          intra_process_client_id, std::move(request));
-      }
-    } else {
+    if (!service_intra_process_base) {
       services_.erase(service_it);
+      auto cli = get_client_intra_process(intra_process_client_id);
+      auto warning_msg =
+        "Intra-process service gone out of scope. "
+        "Do inter-process requests.\n"
+        "Client service name: " + std::string(cli->get_service_name());
+      RCLCPP_WARN(rclcpp::get_logger("rclcpp"), warning_msg.c_str());
+      return;
     }
+    auto service = std::dynamic_pointer_cast<
+      rclcpp::experimental::ServiceIntraProcess<ServiceT>>(service_intra_process_base);
+    if (!service) {
+      auto cli = get_client_intra_process(intra_process_client_id);
+      auto warning_msg =
+        "Intra-process failed to cast server. "
+        "Client service name: " + std::string(cli->get_service_name());
+      RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), warning_msg.c_str());
+      return;
+    }
+
+    service->store_intra_process_request(intra_process_client_id, std::move(request));
   }
 
   template<

@@ -41,15 +41,21 @@ ParameterService::ParameterService(
       const std::shared_ptr<rcl_interfaces::srv::GetParameters::Request> request,
       std::shared_ptr<rcl_interfaces::srv::GetParameters::Response> response)
     {
+      if (request->names.empty()) {
+        RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Received empty get_parameters request");
+        return;
+      }
+      RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Received get_parameters request (%s...)", request->names[0].c_str());
+
       try {
         auto parameters = node_params->get_parameters(request->names);
         for (const auto & param : parameters) {
           response->values.push_back(param.get_value_message());
         }
       } catch (const rclcpp::exceptions::ParameterNotDeclaredException & ex) {
-        RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Failed to get parameters: %s", ex.what());
+        RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Failed to get parameters (%s...) : %s", request->names[0].c_str(), ex.what());
       } catch (const rclcpp::exceptions::ParameterUninitializedException & ex) {
-        RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Failed to get parameters: %s", ex.what());
+        RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Failed to get parameter (%s...): %s", request->names[0].c_str(), ex.what());
       }
     },
     qos_profile, nullptr);
@@ -70,7 +76,7 @@ ParameterService::ParameterService(
             return static_cast<rclcpp::ParameterType>(type);
           });
       } catch (const rclcpp::exceptions::ParameterNotDeclaredException & ex) {
-        RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Failed to get parameter types: %s", ex.what());
+        RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Failed to get parameter types: %s", ex.what());
       }
     },
     qos_profile, nullptr);
@@ -83,6 +89,12 @@ ParameterService::ParameterService(
       const std::shared_ptr<rcl_interfaces::srv::SetParameters::Request> request,
       std::shared_ptr<rcl_interfaces::srv::SetParameters::Response> response)
     {
+      if (request->parameters.empty()) {
+        RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Received empty set_parameters request");
+        return;
+      }
+      RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Received set_parameters request (%s...)", request->parameters[0].name.c_str());
+
       // Set parameters one-by-one, since there's no way to return a partial result if
       // set_parameters() fails.
       auto result = rcl_interfaces::msg::SetParametersResult();
@@ -91,7 +103,7 @@ ParameterService::ParameterService(
           result = node_params->set_parameters_atomically(
             {rclcpp::Parameter::from_parameter_msg(p)});
         } catch (const rclcpp::exceptions::ParameterNotDeclaredException & ex) {
-          RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Failed to set parameter: %s", ex.what());
+          RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Failed to set parameter (%s...): %s", request->parameters[0].name.c_str(), ex.what());
           result.successful = false;
           result.reason = ex.what();
         }
@@ -119,7 +131,7 @@ ParameterService::ParameterService(
         auto result = node_params->set_parameters_atomically(pvariants);
         response->result = result;
       } catch (const rclcpp::exceptions::ParameterNotDeclaredException & ex) {
-        RCLCPP_DEBUG(
+        RCLCPP_ERROR(
           rclcpp::get_logger("rclcpp"), "Failed to set parameters atomically: %s", ex.what());
         response->result.successful = false;
         response->result.reason = "One or more parameters were not declared before setting";
@@ -139,7 +151,7 @@ ParameterService::ParameterService(
         auto descriptors = node_params->describe_parameters(request->names);
         response->descriptors = descriptors;
       } catch (const rclcpp::exceptions::ParameterNotDeclaredException & ex) {
-        RCLCPP_DEBUG(rclcpp::get_logger("rclcpp"), "Failed to describe parameters: %s", ex.what());
+        RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Failed to describe parameters: %s", ex.what());
       }
     },
     qos_profile, nullptr);
