@@ -398,20 +398,6 @@ IntraProcessManager::get_service_intra_process(uint64_t intra_process_service_id
   }
 }
 
-bool
-IntraProcessManager::service_is_available(uint64_t intra_process_client_id)
-{
-  std::shared_lock<std::shared_timed_mutex> lock(mutex_);
-
-  auto service_it = clients_to_services_.find(intra_process_client_id);
-
-  if (service_it != clients_to_services_.end()) {
-    // A server matching the client has been found
-    return true;
-  }
-  return false;
-}
-
 ClientIntraProcessBase::SharedPtr
 IntraProcessManager::get_client_intra_process(uint64_t intra_process_client_id)
 {
@@ -478,16 +464,18 @@ IntraProcessManager::get_action_server_intra_process(
 }
 
 bool
+IntraProcessManager::service_is_available(uint64_t intra_process_client_id)
+{
+  std::shared_lock<std::shared_timed_mutex> lock(mutex_);
+
+  return clients_to_services_.count(intra_process_client_id) > 0u;
+}
+
+bool
 IntraProcessManager::action_server_is_available(uint64_t ipc_action_client_id)
 {
   std::shared_lock<std::shared_timed_mutex> lock(mutex_);
-  auto action_service_it = action_clients_to_servers_.find(ipc_action_client_id);
-
-  if (action_service_it != action_clients_to_servers_.end()) {
-    // An action server matching the action client has been found
-    return true;
-  }
-  return false;
+  return action_clients_to_servers_.count(ipc_action_client_id) > 0u;
 }
 
 uint64_t
