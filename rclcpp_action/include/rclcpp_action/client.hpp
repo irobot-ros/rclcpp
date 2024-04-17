@@ -526,7 +526,7 @@ public:
         ipc_action_client_->store_goal_response_callback(
           hashed_guuid, goal_response_callback);
 
-        intra_process_send_done = ipm->intra_process_action_send_goal_request<ActionT>(
+        intra_process_send_done = ipm->template intra_process_action_send_goal_request<ActionT>(
             ipc_action_client_id_,
             std::move(goal_request),
             hashed_guuid);
@@ -905,7 +905,7 @@ private:
           ipc_action_client_->store_result_response_callback(
             hashed_guuid, result_response_callback);
 
-          intra_process_send_done = ipm->intra_process_action_send_result_request<ActionT>(
+          intra_process_send_done = ipm->template intra_process_action_send_result_request<ActionT>(
               ipc_action_client_id_,
               std::move(goal_result_request));
         }
@@ -961,7 +961,7 @@ private:
         ipc_action_client_->store_cancel_goal_callback(
           hashed_guuid, cancel_goal_callback);
 
-        intra_process_send_done = ipm->intra_process_action_send_cancel_request<ActionT>(
+        intra_process_send_done = ipm->template intra_process_action_send_cancel_request<ActionT>(
             ipc_action_client_id_,
             std::move(cancel_request));
       }

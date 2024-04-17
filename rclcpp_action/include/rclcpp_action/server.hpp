@@ -521,11 +521,7 @@ protected:
 
     auto ipm = lock_intra_process_manager();
 
-    // Here we store the uuid of the goal and associate it with a client
-    // so we can retrieve it when response is ready, or when sending feedback
-    // since the feedback calls only provide the goal UUID
-    // Store an entry
-    ipm->store_intra_process_action_client_goal_uuid(
+    ipm->template intra_process_action_send_goal_response<ActionT>(
       intra_process_action_client_id,
       std::hash<GoalUUID>()(uuid));
 
@@ -598,7 +594,9 @@ protected:
         std::move(status_msg));
     }
 
-    ipm->intra_process_action_send_cancel_response<ActionT>(
+    GoalUUID uuid = request->goal_info.goal_id.uuid;
+
+    ipm->template intra_process_action_send_cancel_response<ActionT>(
       intra_process_action_client_id,
       std::move(response));
   }
@@ -632,8 +630,8 @@ protected:
                 "after destruction of intra process manager");
       }
 
-      auto typed_response = std::static_pointer_cast<ResultResponse>(result_response);
-      ipm->intra_process_action_send_result_response<ActionT>(
+
+      ipm->template intra_process_action_send_result_response<ActionT>(
         intra_process_action_client_id,
         std::move(typed_response));
     }
