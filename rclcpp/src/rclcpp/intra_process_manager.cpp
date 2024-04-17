@@ -468,14 +468,14 @@ IntraProcessManager::service_is_available(uint64_t intra_process_client_id)
 {
   std::shared_lock<std::shared_timed_mutex> lock(mutex_);
 
-  return clients_to_services_.count(intra_process_client_id) == 1u;
+  return clients_to_services_.count(intra_process_client_id) > 0u;
 }
 
 bool
 IntraProcessManager::action_server_is_available(uint64_t ipc_action_client_id)
 {
   std::shared_lock<std::shared_timed_mutex> lock(mutex_);
-  return action_clients_to_servers_.count(ipc_action_client_id) == 1u;
+  return action_clients_to_servers_.count(ipc_action_client_id) > 0u;
 }
 
 uint64_t
