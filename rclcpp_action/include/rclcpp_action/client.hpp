@@ -97,6 +97,16 @@ public:
     );
   }
 
+  /// Return true if there is an intra-process action server that is ready to take goal requests.
+  bool
+  intra_process_action_server_is_available()
+  {
+    if (auto ipm = weak_ipm_.lock()) {
+      return ipm->action_server_is_available(ipc_action_client_id_);
+    }
+    return false;
+  }
+
   // -------------
   // Waitables API
 
