@@ -835,12 +835,18 @@ private:
         // the server might be available in another process or was configured to not use IPC.
         if (intra_process_server_available) {
           size_t hashed_guuid = std::hash<GoalUUID>()(goal_handle->get_goal_id());
-          ipc_action_client_->store_result_response_callback(
-            hashed_guuid, result_response_callback);
 
-          intra_process_send_done = ipm->template intra_process_action_send_result_request<ActionT>(
-              ipc_action_client_id_,
-              std::move(goal_result_request));
+          // check if this goal has been sent through intra-process
+          bool goal_sent_by_ipc = ipc_action_client_->has_goal_id(hashed_guuid);
+
+          if (goal_sent_by_ipc) {
+            ipc_action_client_->store_result_response_callback(
+              hashed_guuid, result_response_callback);
+
+            intra_process_send_done = ipm->template intra_process_action_send_result_request<ActionT>(
+                ipc_action_client_id_,
+                std::move(goal_result_request));
+          }
         }
       }
 

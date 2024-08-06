@@ -158,6 +158,17 @@ public:
     event_info_multi_map_.erase(goal_id);
   }
 
+  bool has_goal_id(size_t goal_id) const
+  {
+    // Check if the intra-process client has this goal_id
+    auto it = event_info_multi_map_.find(goal_id);
+    if (it != event_info_multi_map_.end()) {
+      return true;
+    }
+
+    return false;
+  }
+
 private:
   std::string action_name_;
   QoS qos_profile_;
