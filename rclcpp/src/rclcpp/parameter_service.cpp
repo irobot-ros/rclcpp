@@ -45,7 +45,8 @@ ParameterService::ParameterService(
         RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Received empty get_parameters request");
         return;
       }
-      RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Received get_parameters request (%s...)", request->names[0].c_str());
+      RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Received get_parameters request (%s...)",
+      request->names[0].c_str());
 
       try {
         auto parameters = node_params->get_parameters(request->names);
@@ -53,9 +54,11 @@ ParameterService::ParameterService(
           response->values.push_back(param.get_value_message());
         }
       } catch (const rclcpp::exceptions::ParameterNotDeclaredException & ex) {
-        RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Failed to get parameters (%s...) : %s", request->names[0].c_str(), ex.what());
+        RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Failed to get parameters (%s...) : %s",
+        request->names[0].c_str(), ex.what());
       } catch (const rclcpp::exceptions::ParameterUninitializedException & ex) {
-        RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Failed to get parameter (%s...): %s", request->names[0].c_str(), ex.what());
+        RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Failed to get parameter (%s...): %s",
+        request->names[0].c_str(), ex.what());
       }
     },
     qos_profile, nullptr);
@@ -93,7 +96,8 @@ ParameterService::ParameterService(
         RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Received empty set_parameters request");
         return;
       }
-      RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Received set_parameters request (%s...)", request->parameters[0].name.c_str());
+      RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Received set_parameters request (%s...)",
+      request->parameters[0].name.c_str());
 
       // Set parameters one-by-one, since there's no way to return a partial result if
       // set_parameters() fails.
@@ -103,7 +107,8 @@ ParameterService::ParameterService(
           result = node_params->set_parameters_atomically(
             {rclcpp::Parameter::from_parameter_msg(p)});
         } catch (const rclcpp::exceptions::ParameterNotDeclaredException & ex) {
-          RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Failed to set parameter (%s...): %s", request->parameters[0].name.c_str(), ex.what());
+          RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Failed to set parameter (%s...): %s",
+          request->parameters[0].name.c_str(), ex.what());
           result.successful = false;
           result.reason = ex.what();
         }
