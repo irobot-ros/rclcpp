@@ -289,8 +289,14 @@ ament_export_dependencies(
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
+  file(GLOB_RECURSE AMENT_LINT_AUTO_FILE_EXCLUDE
+    include/rclcpp/experimental/executors/events_executor/concurrent_queue/*.h)
   ament_lint_auto_find_test_dependencies()
 
+  message(AUTHOR_WARNING
+  "Ament lint auto tests are disabled on the following: "
+  ${AMENT_LINT_AUTO_FILE_EXCLUDE}
+)
   add_subdirectory(test)
 endif()
 
