@@ -7,6 +7,7 @@ find_package(action_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rcl REQUIRED)
 find_package(rcl_action REQUIRED)
+find_package(test_msgs REQUIRED)
 find_package(rcpputils REQUIRED)
 find_package(rosidl_runtime_c REQUIRED)
 
@@ -100,6 +101,17 @@ if(BUILD_TESTING)
       rcl_action::rcl_action
       rclcpp::rclcpp
       ${test_msgs_TARGETS}
+    )
+  endif()
+
+  ament_add_gtest(test_actions test/test_actions.cpp TIMEOUT 180)
+  if(TARGET test_actions)
+    ament_target_dependencies(test_actions
+      "rcpputils"
+      "test_msgs"
+    )
+    target_link_libraries(test_actions
+      ${PROJECT_NAME}
     )
   endif()
 

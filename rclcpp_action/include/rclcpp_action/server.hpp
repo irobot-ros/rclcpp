@@ -655,34 +655,84 @@ protected:
     return std::make_pair(user_response, ros_response);
   }
 
-  /// \internal
-  CancelResponse
-  call_handle_cancel_callback(const GoalUUID & uuid) override
+  bool
+  ipc_on_terminal_state(const GoalUUID & goal_uuid, std::shared_ptr<void> result_message)
   {
-    std::shared_ptr<ServerGoalHandle<ActionT>> goal_handle;
-    {
-      std::lock_guard<std::mutex> lock(goal_handles_mutex_);
-      auto element = goal_handles_.find(uuid);
-      if (element != goal_handles_.end()) {
-        goal_handle = element->second.lock();
+    auto ipm = lock_intra_process_manager();
+
+    size_t hashed_uuid = std::hash<GoalUUID>()(goal_uuid);
+
+    uint64_t ipc_action_client_id = ipm->get_action_client_id_from_goal_uuid(hashed_uuid);
+
+    if (ipc_action_client_id) {
+      auto typed_result = std::static_pointer_cast<ResultResponse>(result_message);
+
+      if (client_requested_response(hashed_uuid, typed_result)) {
+        ipm->template intra_process_action_send_result_response<ActionT>(
+          ipc_action_client_id,
+          std::move(typed_result),
+          hashed_uuid);
+
+        auto status_msg = this->get_status_array();
+
+        ipm->template intra_process_action_publish_status<ActionT>(
+          ipc_action_client_id,
+          std::move(status_msg));
+
+        ipm->remove_intra_process_action_client_goal_uuid(hashed_uuid);
       }
+
+      return false;
     }
 
-    CancelResponse resp = CancelResponse::REJECT;
-    if (goal_handle) {
-      resp = handle_cancel_(goal_handle);
-      if (CancelResponse::ACCEPT == resp) {
-        try {
-          goal_handle->_cancel_goal();
-        } catch (const rclcpp::exceptions::RCLError & ex) {
-          RCLCPP_DEBUG(
-            rclcpp::get_logger("rclcpp_action"),
-            "Failed to cancel goal in call_handle_cancel_callback: %s", ex.what());
-          return CancelResponse::REJECT;
-        }
-      }
+    RCLCPP_DEBUG(
+      rclcpp::get_logger("rclcpp_action"),
+      "Action server can't send result response, missing IPC Action client: %s. "
+      "Will do inter-process publish",
+      this->action_name_.c_str());
+    return true;
+  }
+
+  bool
+  ipc_on_executing(const GoalUUID & goal_uuid)
+  {
+    auto ipm = lock_intra_process_manager();
+
+    size_t hashed_uuid = std::hash<GoalUUID>()(goal_uuid);
+
+    uint64_t ipc_action_client_id = ipm->get_action_client_id_from_goal_uuid(hashed_uuid);
+
+    if (ipc_action_client_id) {
+      // This part would be the IPC version of publish_status();
+      auto status_msg = this->get_status_array();
+
+      ipm->template intra_process_action_publish_status<ActionT>(
+        ipc_action_client_id,
+        std::move(status_msg));
+      return false;
     }
-    return resp;
+
+    return true;
+  }
+
+
+  bool
+  ipc_publish_feedback(typename ActionT::Impl::FeedbackMessage::SharedPtr feedback_msg)
+  {
+    auto ipm = lock_intra_process_manager();
+
+    size_t hashed_uuid = std::hash<GoalUUID>()(feedback_msg->goal_id.uuid);
+
+    uint64_t ipc_action_client_id = ipm->get_action_client_id_from_goal_uuid(hashed_uuid);
+
+    if (ipc_action_client_id) {
+        ipm->template intra_process_action_publish_feedback<ActionT>(
+          ipc_action_client_id,
+          std::move(feedback_msg));
+      return false;
+    }
+
+    return true;
   }
 
   /// \internal
