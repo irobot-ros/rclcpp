@@ -582,11 +582,14 @@ public:
     auto server = get_matching_intra_process_action_server<ActionT>(ipc_action_client_id);
 
     if (server) {
+      {
+        std::unique_lock<std::shared_timed_mutex> lock(mutex_);
+        clients_uuid_to_id_[goal_id] = ipc_action_client_id;
+      }
+
       server->store_ipc_action_goal_request(
         ipc_action_client_id, std::move(goal_request));
 
-      std::unique_lock<std::shared_timed_mutex> lock(mutex_);
-      clients_uuid_to_id_[goal_id] = ipc_action_client_id;
       return true;
     }
     return false;
