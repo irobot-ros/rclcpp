@@ -5,7 +5,6 @@
 #include <thread>
 
 #include <rclcpp/executors/single_threaded_executor.hpp>
-#include <rclcpp/executors/static_single_threaded_executor.hpp>
 #include <rclcpp/experimental/executors/events_executor/events_executor.hpp>
 #include <rclcpp/experimental/executors/events_executor/lock_free_events_queue.hpp>
 #include <rclcpp_action/client_goal_handle.hpp>
@@ -19,6 +18,7 @@ using GoalHandleFibonacci = typename rclcpp_action::ServerGoalHandle<Fibonacci>;
 using GoalHandleSharedPtr = typename std::shared_ptr<GoalHandleFibonacci>;
 
 using rclcpp::experimental::executors::EventsExecutor;
+using rclcpp::executors::SingleThreadedExecutor;
 
 // Define a structure to hold test info and utilities
 class TestInfo

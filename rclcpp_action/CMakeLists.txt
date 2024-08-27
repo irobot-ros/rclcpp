@@ -9,6 +9,7 @@ find_package(rcl_action REQUIRED)
 find_package(test_msgs REQUIRED)
 find_package(rcpputils REQUIRED)
 find_package(rosidl_runtime_c REQUIRED)
+find_package(std_msgs REQUIRED)
 
 # Default to C++17
 if(NOT CMAKE_CXX_STANDARD)
@@ -85,6 +86,29 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 
   add_subdirectory(test/benchmark)
+
+  ament_add_gtest(test_ros2_actions test/test_actions.cpp TIMEOUT 180)
+  if(TARGET test_ros2_actions)
+    ament_target_dependencies(test_ros2_actions
+      "test_msgs"
+      "rclcpp"
+    )
+    target_link_libraries(test_ros2_actions
+      ${PROJECT_NAME}
+      mimick
+    )
+  endif()
+
+  ament_add_gtest(test_transient_local test/test_transient_local.cpp TIMEOUT 180)
+  if(TARGET test_transient_local)
+    ament_target_dependencies(test_transient_local
+      "std_msgs"
+    )
+    target_link_libraries(test_transient_local
+      ${PROJECT_NAME}
+      mimick
+    )
+  endif()
 
   ament_add_gtest(test_client test/test_client.cpp TIMEOUT 180)
   if(TARGET test_client)
