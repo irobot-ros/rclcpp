@@ -15,56 +15,56 @@ Todo: Add more action tests:
 
 struct actions_test_data_t
 {
-    bool use_events_executor;
-    bool use_server_ipc;
-    bool use_client_ipc;
+  bool use_events_executor;
+  bool use_server_ipc;
+  bool use_client_ipc;
 };
 
 class ActionsTest
-: public testing::Test, public testing::WithParamInterface<actions_test_data_t>
+  : public testing::Test, public testing::WithParamInterface<actions_test_data_t>
 {
 public:
-    void SetUp() override
-    {
-        test_info = std::make_shared<TestInfo>();
-        rclcpp::init(0, nullptr);
-        auto p = GetParam();
-        std::cout << "Test permutation: "
+  void SetUp() override
+  {
+    test_info = std::make_shared<TestInfo>();
+    rclcpp::init(0, nullptr);
+    auto p = GetParam();
+    std::cout     << "Test permutation: "
                   << (p.use_events_executor ? "{ EventsExecutor, " : "{ SingleThreadedExecutor, ")
                   << (p.use_server_ipc ? "IPC Server, " : "Non-IPC Server, ")
                   << (p.use_client_ipc ? "IPC Client }" : "Non-IPC Client }") << std::endl;
 
-        executor = test_info->create_executor(p.use_events_executor);
-        executor_thread = std::thread([&]() {
+    executor = test_info->create_executor(p.use_events_executor);
+    executor_thread = std::thread([&]() {
           executor->spin();
         });
-        client_node = test_info->create_node("client_node", p.use_client_ipc);
-        server_node = test_info->create_node("server_node", p.use_server_ipc);
-        action_client = test_info->create_action_client(client_node);
-        action_server = test_info->create_action_server(server_node);
-        send_goal_options = test_info->create_goal_options();
-        goal_msg = Fibonacci::Goal();
-    }
+    client_node = test_info->create_node("client_node", p.use_client_ipc);
+    server_node = test_info->create_node("server_node", p.use_server_ipc);
+    action_client = test_info->create_action_client(client_node);
+    action_server = test_info->create_action_server(server_node);
+    send_goal_options = test_info->create_goal_options();
+    goal_msg = Fibonacci::Goal();
+  }
 
-    void TearDown() override
-    {
-        test_info.reset();
-        executor->cancel();
-        if (executor_thread.joinable()) {
-            executor_thread.join();
-        }
-        rclcpp::shutdown();
+  void TearDown() override
+  {
+    test_info.reset();
+    executor->cancel();
+    if (executor_thread.joinable()) {
+      executor_thread.join();
     }
+    rclcpp::shutdown();
+  }
 
-    rclcpp::Executor::UniquePtr executor;
-    std::thread executor_thread;
-    rclcpp::Node::SharedPtr client_node;
-    rclcpp::Node::SharedPtr server_node;
-    rclcpp_action::Client<Fibonacci>::SharedPtr action_client;
-    rclcpp_action::Server<Fibonacci>::SharedPtr action_server;
-    rclcpp_action::Client<Fibonacci>::SendGoalOptions send_goal_options;
-    Fibonacci::Goal goal_msg;
-    std::shared_ptr<TestInfo> test_info;
+  rclcpp::Executor::UniquePtr executor;
+  std::thread executor_thread;
+  rclcpp::Node::SharedPtr client_node;
+  rclcpp::Node::SharedPtr server_node;
+  rclcpp_action::Client<Fibonacci>::SharedPtr action_client;
+  rclcpp_action::Server<Fibonacci>::SharedPtr action_server;
+  rclcpp_action::Client<Fibonacci>::SendGoalOptions send_goal_options;
+  Fibonacci::Goal goal_msg;
+  std::shared_ptr<TestInfo> test_info;
 };
 
 INSTANTIATE_TEST_SUITE_P(
@@ -72,15 +72,15 @@ INSTANTIATE_TEST_SUITE_P(
     ActionsTest,
     testing::Values(
     /*  <UseEventsExecutor> <ServerIsIntraProcess> <ClientIsIntraProcess>  */
-        actions_test_data_t{ false, false, false },
-        actions_test_data_t{ false, false, true  },
-        actions_test_data_t{ false, true,  false },
-        actions_test_data_t{ false, true,  true  },
-        actions_test_data_t{ true,  false, false },
-        actions_test_data_t{ true,  false, true  },
-        actions_test_data_t{ true,  true,  false },
-        actions_test_data_t{ true,  true,  true  }
-    ));
+        actions_test_data_t{false, false, false},
+        actions_test_data_t{false, false, true},
+        actions_test_data_t{false, true, false},
+        actions_test_data_t{false, true, true},
+        actions_test_data_t{true, false, false},
+        actions_test_data_t{true, false, true},
+        actions_test_data_t{true, true, false},
+        actions_test_data_t{true, true, true}
+));
 
 TEST_P(ActionsTest, SucceedGoal)
 {
@@ -92,7 +92,8 @@ TEST_P(ActionsTest, SucceedGoal)
 
     auto goal_handle_future = action_client->async_send_goal(goal_msg, send_goal_options);
     auto accepted_response_wait = goal_handle_future.wait_for(std::chrono::seconds(5));
-    ASSERT_TRUE(accepted_response_wait == std::future_status::ready) << "Goal was rejected by server";
+    ASSERT_TRUE(accepted_response_wait ==
+    std::future_status::ready) << "Goal was rejected by server";
 
     auto goal_handle = goal_handle_future.get();
     ASSERT_TRUE(goal_handle != nullptr) << "Invalid goal";
@@ -121,7 +122,8 @@ TEST_P(ActionsTest, CancelGoal)
 
     auto goal_handle_future = action_client->async_send_goal(goal_msg, send_goal_options);
     auto accepted_response_wait = goal_handle_future.wait_for(std::chrono::seconds(5));
-    ASSERT_TRUE(accepted_response_wait == std::future_status::ready) << "Goal was rejected by server";
+    ASSERT_TRUE(accepted_response_wait ==
+    std::future_status::ready) << "Goal was rejected by server";
     auto goal_handle = goal_handle_future.get();
     ASSERT_TRUE(goal_handle != nullptr) << "Invalid goal";
 
@@ -136,7 +138,8 @@ TEST_P(ActionsTest, CancelGoal)
 
     auto result_future = action_client->async_get_result(goal_handle);
     auto result_response_wait = result_future.wait_for(std::chrono::seconds(5));
-    ASSERT_TRUE(result_response_wait == std::future_status::ready) << "Cancel result response not on time";
+    ASSERT_TRUE(result_response_wait ==
+    std::future_status::ready) << "Cancel result response not on time";
     auto wrapped_result = result_future.get();
     EXPECT_EQ(wrapped_result.code, rclcpp_action::ResultCode::CANCELED);
     EXPECT_TRUE(test_info->result_is_correct(
@@ -153,7 +156,8 @@ TEST_P(ActionsTest, AbortGoal)
 
     auto goal_handle_future = action_client->async_send_goal(goal_msg, send_goal_options);
     auto accepted_response_wait = goal_handle_future.wait_for(std::chrono::seconds(5));
-    ASSERT_TRUE(accepted_response_wait == std::future_status::ready) << "Goal was rejected by server";
+    ASSERT_TRUE(accepted_response_wait ==
+    std::future_status::ready) << "Goal was rejected by server";
     auto goal_handle = goal_handle_future.get();
     ASSERT_TRUE(goal_handle != nullptr) << "Invalid goal";
     auto result_future = action_client->async_get_result(goal_handle);
@@ -176,7 +180,7 @@ TEST_P(ActionsTest, TestReject)
     bool server_available = action_client->wait_for_action_server(std::chrono::seconds(1));
     ASSERT_TRUE(server_available);
 
-    goal_msg.order = 21; // Goals over 20 rejected
+    goal_msg.order = 21;  // Goals over 20 rejected
 
     auto goal_handle_future = action_client->async_send_goal(goal_msg, send_goal_options);
     auto result_wait = goal_handle_future.wait_for(std::chrono::seconds(5));
@@ -264,14 +268,16 @@ TEST_P(ActionsTest, FeedbackRace)
 
     auto goal_handle_future = action_client->async_send_goal(goal_msg, send_goal_options);
 
-    rclcpp::Rate rate(double(test_info->server_rate_hz) * 0.4);  // A bit slower than the server's feedback rate
+    // A bit slower than the server's feedback rate
+    rclcpp::Rate rate(
+    static_cast<double>(test_info->server_rate_hz) * 0.4);
 
     for (size_t i = 0; i < 10 && !test_info->result_callback_called(); i++) {
-      rate.sleep();
-      client_executor->spin_some();
-      if (i == 5) {
-        test_info->succeed_goal();
-      }
+    rate.sleep();
+    client_executor->spin_some();
+    if (i == 5) {
+      test_info->succeed_goal();
+    }
     }
 
     EXPECT_TRUE(test_info->result_callback_called());
@@ -279,6 +285,6 @@ TEST_P(ActionsTest, FeedbackRace)
 
 int main(int argc, char **argv)
 {
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }

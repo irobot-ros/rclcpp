@@ -3,9 +3,12 @@
 #pragma once
 
 #include <thread>
+#include <utility>
+#include <memory>
+#include <string>
+#include <vector>
 
 #include <rclcpp/executors/single_threaded_executor.hpp>
-#include <rclcpp/executors/static_single_threaded_executor.hpp>
 #include <rclcpp/experimental/executors/events_executor/events_executor.hpp>
 #include <rclcpp/experimental/executors/events_executor/lock_free_events_queue.hpp>
 #include <rclcpp_action/client_goal_handle.hpp>
@@ -19,6 +22,7 @@ using GoalHandleFibonacci = typename rclcpp_action::ServerGoalHandle<Fibonacci>;
 using GoalHandleSharedPtr = typename std::shared_ptr<GoalHandleFibonacci>;
 
 using rclcpp::experimental::executors::EventsExecutor;
+using rclcpp::executors::SingleThreadedExecutor;
 
 // Define a structure to hold test info and utilities
 class TestInfo
@@ -36,31 +40,31 @@ public:
   rclcpp::Node::SharedPtr
   create_node(std::string name, bool ipc_enabled)
   {
-      auto node_options = rclcpp::NodeOptions();
-      node_options.use_intra_process_comms(ipc_enabled);
+    auto node_options = rclcpp::NodeOptions();
+    node_options.use_intra_process_comms(ipc_enabled);
 
-      return rclcpp::Node::make_shared(name, "test_namespace", node_options);
+    return rclcpp::Node::make_shared(name, "test_namespace", node_options);
   }
 
   rclcpp_action::Client<Fibonacci>::SharedPtr
   create_action_client(rclcpp::Node::SharedPtr & node)
   {
-      return rclcpp_action::create_client<Fibonacci>(
+    return rclcpp_action::create_client<Fibonacci>(
         node, "fibonacci"
-      );
+    );
   }
 
   // The server executes the following in a thread when accepting the goal
   void execute()
   {
     auto & goal_handle = this->server_goal_handle_;
-
-    rclcpp::Rate loop_rate(double(this->server_rate_hz)); // 100Hz
+    // Run at 100Hz
+    rclcpp::Rate loop_rate(
+      static_cast<double>(this->server_rate_hz));
     auto feedback = std::make_shared<Fibonacci::Feedback>();
     feedback->sequence = this->feedback_sequence;
 
-    while(!this->exit_thread && rclcpp::ok())
-    {
+    while(!this->exit_thread && rclcpp::ok()) {
       if (goal_handle->is_canceling()) {
         auto result = std::make_shared<Fibonacci::Result>();
         result->sequence = this->canceled_sequence;
@@ -110,7 +114,7 @@ public:
   void handle_accepted(const std::shared_ptr<GoalHandleFibonacci> goal_handle)
   {
     this->server_goal_handle_ = goal_handle;
-    this->server_thread = std::thread([&]() { execute(); });
+    this->server_thread = std::thread([&]() {execute();});
   }
 
   rclcpp_action::Server<Fibonacci>::SharedPtr
@@ -119,21 +123,21 @@ public:
     return rclcpp_action::create_server<Fibonacci>(
             node,
             "fibonacci",
-            [this] (const rclcpp_action::GoalUUID & guuid,
-                std::shared_ptr<const Fibonacci::Goal> goal)
-            {
-                return this->handle_goal(guuid, goal);
+      [this] (const rclcpp_action::GoalUUID & guuid,
+      std::shared_ptr<const Fibonacci::Goal> goal)
+      {
+        return this->handle_goal(guuid, goal);
             },
-            [this] (const std::shared_ptr<GoalHandleFibonacci> goal_handle)
-            {
-                (void) goal_handle;
-                return rclcpp_action::CancelResponse::ACCEPT;
+      [this] (const std::shared_ptr<GoalHandleFibonacci> goal_handle)
+      {
+        (void) goal_handle;
+        return rclcpp_action::CancelResponse::ACCEPT;
             },
-            [this] (const std::shared_ptr<GoalHandleFibonacci> goal_handle)
-            {
-                return this->handle_accepted(goal_handle);
+      [this] (const std::shared_ptr<GoalHandleFibonacci> goal_handle)
+      {
+        return this->handle_accepted(goal_handle);
             }
-      );
+    );
   }
 
   rclcpp::Executor::UniquePtr create_executor(bool use_events_executor)
@@ -141,7 +145,8 @@ public:
     if (use_events_executor) {
       auto events_queue = std::make_unique<rclcpp::experimental::executors::LockFreeEventsQueue>();
 
-      return std::make_unique<EventsExecutor>(std::move(events_queue), false, rclcpp::ExecutorOptions());
+      return std::make_unique<EventsExecutor>(std::move(events_queue), false,
+        rclcpp::ExecutorOptions());
     } else {
       return std::make_unique<rclcpp::executors::SingleThreadedExecutor>();
     }
@@ -160,19 +165,19 @@ public:
 
     send_goal_options.goal_response_callback =
       [this](typename ActionGoalHandle::SharedPtr goal_handle)
-        {
-          this->goal_response_cb_called = true;
-          (void)goal_handle;
-        };
+      {
+        this->goal_response_cb_called = true;
+        (void)goal_handle;
+      };
 
     send_goal_options.feedback_callback = [this](
-          typename ActionGoalHandle::SharedPtr handle,
-          const std::shared_ptr<const Fibonacci::Feedback> feedback)
-        {
-          (void) handle;
-          this->feedback_cb_called = result_is_correct(
+      typename ActionGoalHandle::SharedPtr handle,
+      const std::shared_ptr<const Fibonacci::Feedback> feedback)
+      {
+        (void) handle;
+        this->feedback_cb_called = result_is_correct(
             feedback->sequence, rclcpp_action::ResultCode::UNKNOWN);
-        };
+      };
 
     return send_goal_options;
   }
@@ -218,7 +223,7 @@ public:
     return true;
   }
 
-  bool result_callback_called() { return result_cb_called; }
+  bool result_callback_called() {return result_cb_called;}
   size_t server_rate_hz{500};
 
 private:
