@@ -30,6 +30,7 @@
 #include "rclcpp/experimental/ros_message_intra_process_buffer.hpp"
 #include "rclcpp/qos.hpp"
 #include "rclcpp/type_support_decl.hpp"
+#include "rclcpp/detail/add_guard_condition_to_rcl_wait_set.hpp"
 
 namespace rclcpp
 {
@@ -91,6 +92,15 @@ public:
       buffer_type,
       qos_profile,
       std::make_shared<Alloc>(subscribed_type_allocator_));
+  }
+
+  void
+  add_to_wait_set(rcl_wait_set_t * wait_set) override
+  {
+    if (this->buffer_->has_data()) {
+      this->trigger_guard_condition();
+    }
+    detail::add_guard_condition_to_rcl_wait_set(*wait_set, this->gc_);
   }
 
   bool
