@@ -75,10 +75,13 @@ ClientBase::take_type_erased_response(void * response_out, rmw_request_id_t & re
     &request_header_out,
     response_out);
   if (RCL_RET_CLIENT_TAKE_FAILED == ret) {
-    RCLCPP_ERROR(
-      rclcpp::get_logger("rclcpp"),
-      "Error in take_type_erased_response: RCL_RET_CLIENT_TAKE_FAILED. "
-      "Service name: %s", get_service_name());
+    // If we are here, the most common reason is due the client receiving a response
+    // meant for another client.
+    // Currently all clients with the same service name will get the server reponse.
+    // This impacts performances, since the service response is deserialized and
+    // discarded by clients receiving unwanted responses.
+    //
+    // We silently return here, issue tracked by https://github.com/ros2/rclcpp/issues/2397
     return false;
   } else if (RCL_RET_OK != ret) {
     rclcpp::exceptions::throw_from_rcl_error(ret);

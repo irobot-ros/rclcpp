@@ -200,6 +200,17 @@ public:
   rclcpp::Waitable::SharedPtr
   get_intra_process_waitable();
 
+  std::shared_ptr<rclcpp::experimental::IntraProcessManager>
+  lock_intra_process_manager()
+  {
+    auto ipm = weak_ipm_.lock();
+    if (!ipm) {
+      throw std::runtime_error(
+              "Intra-process manager already destroyed");
+    }
+    return ipm;
+  }
+
   // End Waitables API
   // -----------------
 
@@ -375,6 +386,11 @@ protected:
     const void * user_data);
 
   bool on_ready_callback_set_{false};
+
+  // Intra-process action server data fields
+  bool use_intra_process_{false};
+  IntraProcessManagerWeakPtr weak_ipm_;
+  uint64_t ipc_action_server_id_;
 };
 
 /// Action Server
@@ -401,6 +417,26 @@ public:
   using CancelCallback = std::function<CancelResponse(std::shared_ptr<ServerGoalHandle<ActionT>>)>;
   /// Signature of a callback that is used to notify when the goal has been accepted.
   using AcceptedCallback = std::function<void (std::shared_ptr<ServerGoalHandle<ActionT>>)>;
+
+  using ResponseCallback = std::function<void (std::shared_ptr<void> response)>;
+
+  using GoalRequest = typename ActionT::Impl::SendGoalService::Request;
+  using GoalRequestSharedPtr = typename std::shared_ptr<GoalRequest>;
+  using GoalRequestDataPair = typename std::pair<uint64_t, GoalRequestSharedPtr>;
+  using GoalRequestDataPairSharedPtr = typename std::shared_ptr<GoalRequestDataPair>;
+
+  using ResultRequest = typename ActionT::Impl::GetResultService::Request;
+  using ResultRequestSharedPtr = typename std::shared_ptr<ResultRequest>;
+  using ResultRequestDataPair = typename std::pair<uint64_t, ResultRequestSharedPtr>;
+  using ResultRequestDataPairSharedPtr = typename std::shared_ptr<ResultRequestDataPair>;
+
+  using CancelRequest = typename ActionT::Impl::CancelGoalService::Request;
+  using CancelRequestSharedPtr = typename std::shared_ptr<CancelRequest>;
+  using CancelRequestDataPair = typename std::pair<uint64_t, CancelRequestSharedPtr>;
+  using CancelRequestDataPairSharedPtr = typename std::shared_ptr<CancelRequestDataPair>;
+
+  using ResultResponse = typename ActionT::Impl::GetResultService::Response;
+  using ResultResponseSharedPtr = typename std::shared_ptr<ResultResponse>;
 
   /// Construct an action server.
   /**
@@ -460,14 +496,7 @@ public:
     if (!use_intra_process_) {
       return;
     }
-    auto ipm = weak_ipm_.lock();
-    if (!ipm) {
-      // TODO(ivanpauno): should this raise an error?
-      RCLCPP_WARN(
-        rclcpp::get_logger("rclcpp"),
-        "Intra process manager died before than an action server.");
-      return;
-    }
+    auto ipm = lock_intra_process_manager();
     ipm->remove_action_server(ipc_action_server_id_);
   }
 
@@ -490,12 +519,7 @@ protected:
     using Response = typename ActionT::Impl::SendGoalService::Response;
     auto goal_response = std::static_pointer_cast<Response>(response_pair.second);
 
-    auto ipm = weak_ipm_.lock();
-    if (!ipm) {
-      throw std::runtime_error(
-              "intra_process_action_send_goal_response called "
-              "after destruction of intra process manager");
-    }
+    auto ipm = lock_intra_process_manager();
 
     // Here we store the uuid of the goal and associate it with a client
     // so we can retrieve it when response is ready, or when sending feedback

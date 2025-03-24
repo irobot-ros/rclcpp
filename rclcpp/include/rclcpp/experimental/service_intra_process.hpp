@@ -21,6 +21,7 @@
 #include <string>
 #include <tuple>
 #include <utility>
+#include <unordered_map>
 
 #include "rcl/error_handling.h"
 #include "rcutils/logging_macros.h"
@@ -75,7 +76,8 @@ public:
     rclcpp::Context::SharedPtr context,
     const std::string & service_name,
     const rclcpp::QoS & qos_profile)
-  : ServiceIntraProcessBase(context, service_name, qos_profile), any_callback_(callback), service_handle_(service_handle)
+  : ServiceIntraProcessBase(context, service_name, qos_profile), any_callback_(callback),
+    service_handle_(service_handle)
   {
     // Create the intra-process buffer.
     buffer_ = rclcpp::experimental::create_service_intra_process_buffer<
@@ -174,7 +176,8 @@ public:
     req_id->sequence_number = client_request_id;
     req_id->from_intra_process = true;
 
-    callback_info_.emplace(std::make_pair(req_id->sequence_number, std::make_pair(intra_process_client_id, std::move(value))));
+    callback_info_.emplace(std::make_pair(req_id->sequence_number,
+          std::make_pair(intra_process_client_id, std::move(value))));
 
     SharedResponse response = any_callback_.dispatch(serv_handle, req_id, std::move(typed_request));
 

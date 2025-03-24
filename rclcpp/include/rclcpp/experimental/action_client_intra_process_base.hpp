@@ -55,10 +55,12 @@ public:
   ActionClientIntraProcessBase(
     rclcpp::Context::SharedPtr context,
     const std::string & action_name,
-    const rclcpp::QoS & qos_profile)
-  : gc_(context),
-    action_name_(action_name),
-    qos_profile_(qos_profile)
+    const rclcpp::QoS & qos_profile,
+    std::recursive_mutex & reentrant_mutex)
+  : action_name_(action_name),
+    qos_profile_(qos_profile),
+    gc_(context),
+    reentrant_mutex_(reentrant_mutex)
   {}
 
   virtual ~ActionClientIntraProcessBase() = default;
@@ -128,122 +130,123 @@ public:
               "is not callable.");
     }
 
-    set_callback_to_event_type(EventType::ResultResponse, callback);
-    set_callback_to_event_type(EventType::CancelResponse, callback);
-    set_callback_to_event_type(EventType::GoalResponse, callback);
-    set_callback_to_event_type(EventType::FeedbackReady, callback);
-    set_callback_to_event_type(EventType::StatusReady, callback);
+    std::lock_guard<std::recursive_mutex> lock(reentrant_mutex_);
+    on_ready_callback_ = callback;
+
+    // If we had events happened before the "on_ready" callback was set,
+    // call callback with the events counter "unread_count".
+    for (auto & pair : event_info_multi_map_) {
+      auto & unread_count = pair.second.unread_count;
+      auto & event_type = pair.second.event_type;
+      if (unread_count) {
+        callback(unread_count, static_cast<int>(event_type));
+        unread_count = 0;
+      }
+    }
   }
 
   void
   clear_on_ready_callback() override
   {
     std::lock_guard<std::recursive_mutex> lock(reentrant_mutex_);
-    event_type_to_on_ready_callback_.clear();
+    on_ready_callback_ = nullptr;
   }
 
-protected:
-  std::recursive_mutex reentrant_mutex_;
-  rclcpp::GuardCondition gc_;
-
-  // Action client on ready callbacks and unread count.
-  // These callbacks can be set by the user to be notified about new events
-  // on the action client like a new goal response, result response, etc.
-  // These events have a counter associated with them, counting the amount of events
-  // that happened before having assigned a callback for them.
-  using EventTypeOnReadyCallback = std::function<void (size_t)>;
-  using CallbackUnreadCountPair = std::pair<EventTypeOnReadyCallback, size_t>;
-
-  // Map the different action client event types to their callbacks and unread count.
-  std::unordered_map<EventType, CallbackUnreadCountPair> event_type_to_on_ready_callback_;
-
-  // Invoke the callback to be called when the action client has a new event
-  void
-  invoke_on_ready_callback(EventType event_type)
+  void erase_goal_info(size_t goal_id)
   {
     std::lock_guard<std::recursive_mutex> lock(reentrant_mutex_);
-
-    // Search for a callback for this event type
-    auto it = event_type_to_on_ready_callback_.find(event_type);
-
-    if (it != event_type_to_on_ready_callback_.end()) {
-      auto & on_ready_callback = it->second.first;
-      // If there's a callback associated with this event type, call it
-      if (on_ready_callback) {
-        on_ready_callback(1);
-      } else {
-        // We don't have a callback for this event type yet,
-        // increase its event counter.
-        auto & event_type_unread_count = it->second.second;
-        event_type_unread_count++;
-      }
-    } else {
-      // No entries found for this event type, create one
-      // with an emtpy callback and one unread event.
-      event_type_to_on_ready_callback_.emplace(event_type, std::make_pair(nullptr, 1));
-    }
+    event_info_multi_map_.erase(goal_id);
   }
 
 private:
   std::string action_name_;
   QoS qos_profile_;
 
-  void set_callback_to_event_type(
-    EventType event_type,
-    std::function<void(size_t, int)> callback)
-  {
-    auto new_callback = create_event_type_callback(callback, event_type);
+protected:
+  rclcpp::GuardCondition gc_;
 
+  // Alias for the type used for the server responses callback
+  using ResponseCallback = std::function<void (std::shared_ptr<void>/*server response*/)>;
+  using OnReadyCallback = std::function<void(size_t, int)>;
+
+  // Define a structure to hold event information
+  struct EventInfo
+  {
+    // The event type
+    EventType event_type;
+    // The callback to be called with the responses from the server
+    ResponseCallback response_callback;
+    // Counter of events received before the "on_ready" and "response_callback" were set
+    size_t unread_count;
+  };
+
+  // Mutex to sync operations on the client
+  std::recursive_mutex & reentrant_mutex_;
+  OnReadyCallback on_ready_callback_{nullptr};
+  std::unordered_multimap<size_t /*Goal ID*/, EventInfo> event_info_multi_map_;
+
+  // Invoke the callback to be called when the action client has a new event
+  // If the callback hasn't been set, increase the unread count.
+  void invoke_on_ready_callback(
+    EventType event_type,
+    size_t goal_id = 0)
+  {
     std::lock_guard<std::recursive_mutex> lock(reentrant_mutex_);
 
-    // Check if we have already an entry for this event type
-    auto it = event_type_to_on_ready_callback_.find(event_type);
-
-    if (it != event_type_to_on_ready_callback_.end()) {
-      // We have an entry for this event type, check how many
-      // events of this event type happened so far.
-      auto & event_type_unread_count = it->second.second;
-      if (event_type_unread_count) {
-        new_callback(event_type_unread_count);
+    auto range = event_info_multi_map_.equal_range(goal_id);
+    for (auto it = range.first; it != range.second; ++it) {
+      if (it->second.event_type == event_type) {
+        if (on_ready_callback_) {
+          on_ready_callback_(1, static_cast<int>(event_type));
+        } else {
+          it->second.unread_count++;
+        }
+        return;
       }
-      event_type_unread_count = 0;
-      // Set the new callback for this event type
-      auto & event_type_on_ready_callback = it->second.first;
-      event_type_on_ready_callback = new_callback;
-    } else {
-      // We had no entries for this event type, create one
-      // with the new callback and zero as unread count.
-      event_type_to_on_ready_callback_.emplace(event_type, std::make_pair(new_callback, 0));
     }
+
+    // If no entry found, create a new one with unread_count = 1
+    EventInfo event_info{event_type, nullptr, 1};
+    event_info_multi_map_.emplace(goal_id, event_info);
   }
 
-  std::function<void(size_t)>
-  create_event_type_callback(
-    std::function<void(size_t, int)> callback,
-    EventType event_type)
+  void set_response_callback_to_event_type(
+    EventType event_type,
+    ResponseCallback response_callback,
+    size_t goal_id = 0)
   {
-    // Note: we bind the int identifier argument to this waitable's entity types
-    auto new_callback =
-      [callback, event_type, this](size_t number_of_events) {
-        try {
-          callback(number_of_events, static_cast<int>(event_type));
-        } catch (const std::exception & exception) {
-          RCLCPP_ERROR_STREAM(
-            rclcpp::get_logger("rclcpp_action"),
-            "rclcpp::experimental::ActionClientIntraProcessBase@" << this <<
-              " caught " << rmw::impl::cpp::demangle(exception) <<
-              " exception in user-provided callback for the 'on ready' callback: " <<
-              exception.what());
-        } catch (...) {
-          RCLCPP_ERROR_STREAM(
-            rclcpp::get_logger("rclcpp_action"),
-            "rclcpp::experimental::ActionClientIntraProcessBase@" << this <<
-              " caught unhandled exception in user-provided callback " <<
-              "for the 'on ready' callback");
-        }
-      };
+    std::lock_guard<std::recursive_mutex> lock(reentrant_mutex_);
 
-    return new_callback;
+    EventInfo event_info{event_type, response_callback, 0};
+    event_info_multi_map_.emplace(goal_id, event_info);
+  }
+
+  void call_response_callback_and_erase(
+    EventType event_type,
+    const std::shared_ptr<void> & response,
+    size_t goal_id = 0,
+    bool erase_event_info = true)
+  {
+    std::lock_guard<std::recursive_mutex> lock(reentrant_mutex_);
+
+    auto range = event_info_multi_map_.equal_range(goal_id);
+
+    for (auto it = range.first; it != range.second; ++it) {
+      if (it->second.event_type == event_type) {
+        auto & response_callback = it->second.response_callback;
+        if (response_callback) {
+          response_callback(response);
+        } else {
+          throw std::runtime_error(
+            "IPC ActionClient: response_callback not set! EventType: " +
+            std::to_string(static_cast<int>(event_type)));
+        }
+        if (erase_event_info) {
+          event_info_multi_map_.erase(it);
+        }
+        return;
+      }
+    }
   }
 };
 

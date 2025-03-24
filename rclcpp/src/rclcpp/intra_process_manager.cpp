@@ -79,7 +79,7 @@ IntraProcessManager::add_intra_process_client(ClientIntraProcessBase::SharedPtr 
     }
     if (can_communicate(client, intra_process_service)) {
       uint64_t service_id = pair.first;
-      clients_to_services_.emplace(client_id, service_id);
+      clients_to_services_[client_id] = service_id;
       intra_process_service->add_intra_process_client(client, client_id);
       break;
     }
@@ -121,7 +121,7 @@ IntraProcessManager::add_intra_process_service(ServiceIntraProcessBase::SharedPt
     }
     if (can_communicate(client, service)) {
       uint64_t client_id = pair.first;
-      clients_to_services_.emplace(client_id, service_id);
+      clients_to_services_[client_id] = service_id;
 
       service->add_intra_process_client(client, client_id);
     }
@@ -147,7 +147,7 @@ IntraProcessManager::add_intra_process_action_client(
     }
     if (can_communicate(client, server)) {
       uint64_t server_id = pair.first;
-      action_clients_to_servers_.emplace(client_id, server_id);
+      action_clients_to_servers_[client_id] = server_id;
       break;
     }
   }
@@ -187,23 +187,11 @@ IntraProcessManager::add_intra_process_action_server(
     }
     if (can_communicate(ipc_action_client, server)) {
       uint64_t client_id = pair.first;
-      action_clients_to_servers_.emplace(client_id, server_id);
+      action_clients_to_servers_[client_id] = server_id;
     }
   }
-  return server_id;
-}
 
-// Store an intra-process action client ID along its current
-// goal UUID, since later when the server process a request
-// it'll use the goal UUID to retrieve the client which asked for
-// the result.
-void
-IntraProcessManager::store_intra_process_action_client_goal_uuid(
-  uint64_t ipc_action_client_id,
-  size_t uuid)
-{
-  std::unique_lock<std::shared_timed_mutex> lock(mutex_);
-  clients_uuid_to_id_[uuid] = ipc_action_client_id;
+  return server_id;
 }
 
 // Remove an action client goal UUID entry
@@ -229,12 +217,11 @@ IntraProcessManager::get_action_client_id_from_goal_uuid(size_t uuid)
 
   auto iter = clients_uuid_to_id_.find(uuid);
 
-  if (iter == clients_uuid_to_id_.end()) {
-    throw std::runtime_error(
-            "No ipc action clients stored with this UUID.");
+  if (iter != clients_uuid_to_id_.end()) {
+    return iter->second;
   }
 
-  return iter->second;
+  return 0;
 }
 
 void
@@ -452,6 +439,9 @@ IntraProcessManager::get_action_client_intra_process(
 
   auto client_it = action_clients_.find(intra_process_action_client_id);
   if (client_it == action_clients_.end()) {
+    RCLCPP_WARN(
+      rclcpp::get_logger("rclcpp"),
+      "No action clients match the specified ID: %ld", intra_process_action_client_id);
     return nullptr;
   } else {
     auto client = client_it->second.lock();
@@ -459,6 +449,9 @@ IntraProcessManager::get_action_client_intra_process(
       return client;
     } else {
       action_clients_.erase(client_it);
+      RCLCPP_WARN(
+        rclcpp::get_logger("rclcpp"),
+        "Action client out of scope. ID: %ld", intra_process_action_client_id);
       return nullptr;
     }
   }

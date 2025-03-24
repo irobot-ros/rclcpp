@@ -769,18 +769,6 @@ ServerBase::execute_result_request_received(
   data.reset();
 }
 
-// Todo: Use an intra-process way to store goal_results, when using IPC
-std::shared_ptr<void>
-ServerBase::get_result_response(GoalUUID uuid)
-{
-  std::lock_guard<std::recursive_mutex> lock(pimpl_->unordered_map_mutex_);
-  auto iter = pimpl_->goal_results_.find(uuid);
-  if (iter != pimpl_->goal_results_.end()) {
-    return iter->second;
-  }
-  return nullptr;
-}
-
 void
 ServerBase::execute_check_expired_goals()
 {
