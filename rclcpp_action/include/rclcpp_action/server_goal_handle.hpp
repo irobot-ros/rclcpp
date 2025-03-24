@@ -18,6 +18,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <iostream>
 
 #include "rcl_action/types.h"
 #include "rcl_action/goal_handle.h"
@@ -196,7 +197,7 @@ public:
 
   /// Indicate that a goal has been canceled.
   /**
-   * Only call this if the goal is canceling.
+   * Only call this if the goal is executing or pending, but has been canceled.
    * This is a terminal state, no more methods should be called on a goal handle after this is
    * called.
    *

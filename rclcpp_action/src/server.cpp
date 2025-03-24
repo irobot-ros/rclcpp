@@ -29,6 +29,7 @@
 #include "rcpputils/scope_exit.hpp"
 
 #include "action_msgs/msg/goal_status_array.hpp"
+#include "action_msgs/srv/cancel_goal.hpp"
 #include "rclcpp/exceptions.hpp"
 #include "rclcpp_action/server.hpp"
 
@@ -236,6 +237,11 @@ public:
   size_t num_services_ = 0;
   size_t num_guard_conditions_ = 0;
 
+  std::atomic<bool> goal_request_ready_{false};
+  std::atomic<bool> cancel_request_ready_{false};
+  std::atomic<bool> result_request_ready_{false};
+  std::atomic<bool> goal_expired_{false};
+
   // Lock for unordered_maps
   std::recursive_mutex unordered_map_mutex_;
 
@@ -368,6 +374,11 @@ ServerBase::is_ready(const rcl_wait_set_t & wait_set)
       &result_request_ready,
       &goal_expired);
   }
+
+  pimpl_->goal_request_ready_ = goal_request_ready;
+  pimpl_->cancel_request_ready_ = cancel_request_ready;
+  pimpl_->result_request_ready_ = result_request_ready;
+  pimpl_->goal_expired_ = goal_expired;
 
   if (RCL_RET_OK != ret) {
     rclcpp::exceptions::throw_from_rcl_error(ret);
@@ -755,6 +766,19 @@ ServerBase::execute_result_request_received(
       rclcpp::exceptions::throw_from_rcl_error(rcl_ret);
     }
   }
+  data.reset();
+}
+
+// Todo: Use an intra-process way to store goal_results, when using IPC
+std::shared_ptr<void>
+ServerBase::get_result_response(GoalUUID uuid)
+{
+  std::lock_guard<std::recursive_mutex> lock(pimpl_->unordered_map_mutex_);
+  auto iter = pimpl_->goal_results_.find(uuid);
+  if (iter != pimpl_->goal_results_.end()) {
+    return iter->second;
+  }
+  return nullptr;
 }
 
 void
@@ -786,11 +810,9 @@ ServerBase::execute_check_expired_goals()
   }
 }
 
-void
-ServerBase::publish_status()
+std::shared_ptr<action_msgs::msg::GoalStatusArray>
+ServerBase::get_status_array()
 {
-  rcl_ret_t ret;
-
   // We need to hold the lock across this entire method because
   // rcl_action_server_get_goal_handles() returns an internal pointer to the
   // goal data.
@@ -799,7 +821,7 @@ ServerBase::publish_status()
   // Get all goal handles known to C action server
   rcl_action_goal_handle_t ** goal_handles = NULL;
   size_t num_goals = 0;
-  ret = rcl_action_server_get_goal_handles(
+  rcl_ret_t ret = rcl_action_server_get_goal_handles(
     pimpl_->action_server_.get(), &goal_handles, &num_goals);
 
   if (RCL_RET_OK != ret) {
@@ -837,8 +859,16 @@ ServerBase::publish_status()
     status_msg->status_list.push_back(msg);
   }
 
+  return status_msg;
+}
+
+void
+ServerBase::publish_status()
+{
+  auto status_msg = get_status_array();
+
   // Publish the message through the status publisher
-  ret = rcl_action_publish_status(pimpl_->action_server_.get(), status_msg.get());
+  rcl_ret_t ret = rcl_action_publish_status(pimpl_->action_server_.get(), status_msg.get());
 
   if (RCL_RET_OK != ret) {
     rclcpp::exceptions::throw_from_rcl_error(ret);
@@ -1053,4 +1083,35 @@ ServerBase::clear_on_ready_callback()
   }
 
   entity_type_to_on_ready_callback_.clear();
+}
+
+void
+ServerBase::setup_intra_process(
+  uint64_t ipc_action_server_id,
+  IntraProcessManagerWeakPtr weak_ipm)
+{
+  weak_ipm_ = weak_ipm;
+  use_intra_process_ = true;
+  ipc_action_server_id_ = ipc_action_server_id;
+}
+
+rclcpp::Waitable::SharedPtr
+ServerBase::get_intra_process_waitable()
+{
+  std::lock_guard<std::recursive_mutex> lock(ipc_mutex_);
+
+  // If not using intra process, shortcut to nullptr.
+  if (!use_intra_process_) {
+    return nullptr;
+  }
+  // Get the intra process manager.
+  auto ipm = weak_ipm_.lock();
+  if (!ipm) {
+    throw std::runtime_error(
+            "rclcpp_action::ServerBase::get_intra_process_waitable() called "
+            "after destruction of intra process manager");
+  }
+
+  // Use the id to retrieve the intra-process client from the intra-process manager.
+  return ipm->get_action_server_intra_process(ipc_action_server_id_);
 }
