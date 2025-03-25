@@ -266,13 +266,7 @@ public:
       }
       this->do_inter_process_publish(*shared_msg);
     } else {
-      if (buffer_) {
-        auto shared_msg =
-          this->do_intra_process_ros_message_publish_and_return_shared(std::move(msg));
-        buffer_->add_shared(shared_msg);
-      } else {
-        this->do_intra_process_ros_message_publish(std::move(msg));
-      }
+      this->do_intra_process_ros_message_publish(std::move(msg));
     }
   }
 
