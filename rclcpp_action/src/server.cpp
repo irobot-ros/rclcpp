@@ -252,8 +252,11 @@ public:
   // rcl goal handles are kept so api to send result doesn't try to access freed memory
   std::unordered_map<GoalUUID, std::shared_ptr<rcl_action_goal_handle_t>> goal_handles_;
 
+
   // next ready event for taking, will be set by is_ready and will be processed by take_data
   std::atomic<size_t> next_ready_event;
+  // used to indicate that next_ready_event has no ready event for processing
+  static constexpr size_t NO_EVENT_READY = std::numeric_limits<size_t>::max();
 
   rclcpp::Logger logger_;
 };
@@ -384,7 +387,7 @@ ServerBase::is_ready(const rcl_wait_set_t & wait_set)
     rclcpp::exceptions::throw_from_rcl_error(ret);
   }
 
-  pimpl_->next_ready_event = std::numeric_limits<uint32_t>::max();
+  pimpl_->next_ready_event = ServerBaseImpl::NO_EVENT_READY;
 
   if (goal_request_ready) {
     pimpl_->next_ready_event = static_cast<uint32_t>(EntityType::GoalService);
@@ -412,10 +415,12 @@ ServerBase::is_ready(const rcl_wait_set_t & wait_set)
 std::shared_ptr<void>
 ServerBase::take_data()
 {
-  size_t next_ready_event = pimpl_->next_ready_event.exchange(std::numeric_limits<uint32_t>::max());
+  size_t next_ready_event = pimpl_->next_ready_event.exchange(ServerBaseImpl::NO_EVENT_READY);
 
-  if (next_ready_event == std::numeric_limits<uint32_t>::max()) {
-    throw std::runtime_error("ServerBase::take_data() called but no data is ready");
+  if (next_ready_event == ServerBaseImpl::NO_EVENT_READY) {
+    // there is a known bug in iron, that take_data might be called multiple
+    // times. Therefore instead of throwing, we just return a nullptr as a workaround.
+    return nullptr;
   }
 
   return take_data_by_entity_id(next_ready_event);
@@ -494,7 +499,9 @@ void
 ServerBase::execute(const std::shared_ptr<void> & data_in)
 {
   if (!data_in) {
-    throw std::runtime_error("ServerBase::execute: give data pointer was null");
+    // workaround, if take_data was called multiple timed, it returns a nullptr
+    // normally we should throw here, but as an API stable bug fix, we just ignore this...
+    return;
   }
 
   std::shared_ptr<ServerBaseData> data_ptr = std::static_pointer_cast<ServerBaseData>(data_in);
@@ -766,7 +773,6 @@ ServerBase::execute_result_request_received(
       rclcpp::exceptions::throw_from_rcl_error(rcl_ret);
     }
   }
-  data.reset();
 }
 
 void
@@ -853,10 +859,56 @@ ServerBase::get_status_array()
 void
 ServerBase::publish_status()
 {
-  auto status_msg = get_status_array();
+  rcl_ret_t ret;
+
+  // We need to hold the lock across this entire method because
+  // rcl_action_server_get_goal_handles() returns an internal pointer to the
+  // goal data.
+  std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
+
+  // Get all goal handles known to C action server
+  rcl_action_goal_handle_t ** goal_handles = NULL;
+  size_t num_goals = 0;
+  ret = rcl_action_server_get_goal_handles(
+    pimpl_->action_server_.get(), &goal_handles, &num_goals);
+
+  if (RCL_RET_OK != ret) {
+    rclcpp::exceptions::throw_from_rcl_error(ret);
+  }
+
+  auto status_msg = std::make_shared<action_msgs::msg::GoalStatusArray>();
+  status_msg->status_list.reserve(num_goals);
+  // Populate a c++ status message with the goals and their statuses
+  rcl_action_goal_status_array_t c_status_array =
+    rcl_action_get_zero_initialized_goal_status_array();
+  ret = rcl_action_get_goal_status_array(pimpl_->action_server_.get(), &c_status_array);
+  if (RCL_RET_OK != ret) {
+    rclcpp::exceptions::throw_from_rcl_error(ret);
+  }
+
+  RCPPUTILS_SCOPE_EXIT(
+  {
+    ret = rcl_action_goal_status_array_fini(&c_status_array);
+    if (RCL_RET_OK != ret) {
+      RCLCPP_ERROR(pimpl_->logger_, "Failed to fini status array message");
+    }
+  });
+
+  for (size_t i = 0; i < c_status_array.msg.status_list.size; ++i) {
+    auto & c_status_msg = c_status_array.msg.status_list.data[i];
+
+    action_msgs::msg::GoalStatus msg;
+    msg.status = c_status_msg.status;
+    // Convert C goal info to C++ goal info
+    convert(c_status_msg.goal_info, &msg.goal_info.goal_id.uuid);
+    msg.goal_info.stamp.sec = c_status_msg.goal_info.stamp.sec;
+    msg.goal_info.stamp.nanosec = c_status_msg.goal_info.stamp.nanosec;
+
+    status_msg->status_list.push_back(msg);
+  }
 
   // Publish the message through the status publisher
-  rcl_ret_t ret = rcl_action_publish_status(pimpl_->action_server_.get(), status_msg.get());
+  ret = rcl_action_publish_status(pimpl_->action_server_.get(), status_msg.get());
 
   if (RCL_RET_OK != ret) {
     rclcpp::exceptions::throw_from_rcl_error(ret);
@@ -933,6 +985,102 @@ ServerBase::publish_feedback(std::shared_ptr<void> feedback_msg)
   if (RCL_RET_OK != ret) {
     rclcpp::exceptions::throw_from_rcl_error(ret, "Failed to publish feedback");
   }
+}
+
+std::shared_ptr<rcl_action_goal_handle_t>
+ServerBase::get_rcl_action_goal_handle(
+  rcl_action_goal_info_t goal_info,
+  GoalUUID uuid)
+{
+  // This api is a workaround for IPC communication.
+  // The goal would be not use any rcl stuff.
+  auto deleter = [](rcl_action_goal_handle_t * ptr)
+    {
+      if (nullptr != ptr) {
+        rcl_ret_t fail_ret = rcl_action_goal_handle_fini(ptr);
+        if (RCL_RET_OK != fail_ret) {
+          RCLCPP_DEBUG(
+            rclcpp::get_logger("rclcpp_action"),
+            "failed to fini rcl_action_goal_handle_t in deleter");
+        }
+        delete ptr;
+      }
+    };
+  rcl_action_goal_handle_t * rcl_handle;
+  {
+    std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
+    rcl_handle = rcl_action_accept_new_goal(pimpl_->action_server_.get(), &goal_info);
+  }
+  if (!rcl_handle) {
+    throw std::runtime_error("Failed to accept new goal\n");
+  }
+
+  std::shared_ptr<rcl_action_goal_handle_t> handle(new rcl_action_goal_handle_t, deleter);
+  // Copy out goal handle since action server storage disappears when it is fini'd
+  *handle = *rcl_handle;
+
+  {
+    std::lock_guard<std::recursive_mutex> lock(pimpl_->unordered_map_mutex_);
+    pimpl_->goal_handles_[uuid] = handle;
+  }
+
+  return handle;
+}
+
+std::shared_ptr<action_msgs::srv::CancelGoal::Response>
+ServerBase::process_cancel_request(rcl_action_cancel_request_t & cancel_request)
+{
+  rcl_ret_t ret;
+
+  // Get a list of goal info that should be attempted to be cancelled
+  rcl_action_cancel_response_t cancel_response = rcl_action_get_zero_initialized_cancel_response();
+
+  {
+    std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
+    ret = rcl_action_process_cancel_request(
+      pimpl_->action_server_.get(),
+      &cancel_request,
+      &cancel_response);
+  }
+
+  if (RCL_RET_OK != ret) {
+    rclcpp::exceptions::throw_from_rcl_error(ret);
+  }
+
+  RCPPUTILS_SCOPE_EXIT(
+  {
+    ret = rcl_action_cancel_response_fini(&cancel_response);
+    if (RCL_RET_OK != ret) {
+      RCLCPP_ERROR(pimpl_->logger_, "Failed to fini cancel response");
+    }
+  });
+
+  auto response = std::make_shared<action_msgs::srv::CancelGoal::Response>();
+
+  response->return_code = cancel_response.msg.return_code;
+  auto & goals = cancel_response.msg.goals_canceling;
+  // For each canceled goal, call cancel callback
+  for (size_t i = 0; i < goals.size; ++i) {
+    const rcl_action_goal_info_t & goal_info = goals.data[i];
+    GoalUUID uuid;
+    convert(goal_info, &uuid);
+    auto response_code = call_handle_cancel_callback(uuid);
+    if (CancelResponse::ACCEPT == response_code) {
+      action_msgs::msg::GoalInfo cpp_info;
+      cpp_info.goal_id.uuid = uuid;
+      cpp_info.stamp.sec = goal_info.stamp.sec;
+      cpp_info.stamp.nanosec = goal_info.stamp.nanosec;
+      response->goals_canceling.push_back(cpp_info);
+    }
+  }
+
+  // If the user rejects all individual requests to cancel goals,
+  // then we consider the top-level cancel request as rejected.
+  if (goals.size >= 1u && 0u == response->goals_canceling.size()) {
+    response->return_code = action_msgs::srv::CancelGoal::Response::ERROR_REJECTED;
+  }
+
+  return response;
 }
 
 void

@@ -175,7 +175,7 @@ public:
   uint64_t
   add_intra_process_service(rclcpp::experimental::ServiceIntraProcessBase::SharedPtr service);
 
-    /// Register an intra-process action client with the manager,
+  /// Register an intra-process action client with the manager,
   /// returns the action client unique id.
   /**
    * \param client the ActionClientIntraProcessBase to register.
