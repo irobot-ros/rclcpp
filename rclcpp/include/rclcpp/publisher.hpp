@@ -258,6 +258,10 @@ public:
     bool inter_process_publish_needed =
       get_subscription_count() > get_intra_process_subscription_count() || buffer_;
 
+    // If the publisher is configured with transient local durability, we must publish
+    // inter-process. This ensures that the RMW stores the messages for late joiner subscriptions.
+    // This has the consequence of subscriptions experiencing the double-delivery issue
+    // mentioned in https://github.com/ros2/rclcpp/issues/1750
     if (inter_process_publish_needed) {
       auto shared_msg =
         this->do_intra_process_ros_message_publish_and_return_shared(std::move(msg));
@@ -291,8 +295,8 @@ public:
   {
     // Avoid allocating when not using intra process.
     if (!intra_process_is_enabled_) {
-      this->do_inter_process_publish(msg);
-      return;
+      // In this case we're not using intra process.
+      return this->do_inter_process_publish(msg);
     }
     // Otherwise we have to allocate memory in a unique_ptr and pass it along.
     // As the message is not const, a copy should be made.
@@ -342,11 +346,6 @@ public:
         buffer_->add_shared(ros_msg_ptr);
       }
     } else {
-      if (buffer_) {
-        auto ros_msg_ptr = std::make_shared<ROSMessageType>();
-        rclcpp::TypeAdapter<MessageT>::convert_to_ros_message(*msg, *ros_msg_ptr);
-        buffer_->add_shared(ros_msg_ptr);
-      }
       this->do_intra_process_publish(std::move(msg));
     }
   }
