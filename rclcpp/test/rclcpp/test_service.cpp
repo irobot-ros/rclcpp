@@ -184,9 +184,12 @@ TEST_F(TestService, basic_public_getters) {
       ipc_setting = rclcpp::IntraProcessSetting::Disable;
     }
 
-    const rclcpp::Service<test_msgs::srv::Empty> base(
+    rclcpp::Service<test_msgs::srv::Empty> base(
       node_handle_int->get_node_base_interface(),
-      &service_handle, cb, ipc_setting);
+      &service_handle, cb);
+
+    base.post_init_setup(node_handle_int->get_node_base_interface(), ipc_setting);
+
     // Use get_service_handle specific to const service
     std::shared_ptr<const rcl_service_t> const_service_handle = base.get_service_handle();
     EXPECT_NE(nullptr, const_service_handle);
