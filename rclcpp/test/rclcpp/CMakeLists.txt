@@ -591,6 +591,12 @@ if(TARGET test_timer)
   target_link_libraries(test_timer ${PROJECT_NAME} mimick)
 endif()
 
+ament_add_gtest(test_timers_manager test_timers_manager.cpp
+  APPEND_LIBRARY_DIRS "${append_library_dirs}")
+if(TARGET test_timers_manager)
+  target_link_libraries(test_timers_manager ${PROJECT_NAME})
+endif()
+
 ament_add_gtest(test_time_source test_time_source.cpp
   APPEND_LIBRARY_DIRS "${append_library_dirs}")
 if(TARGET test_time_source)
@@ -622,18 +628,22 @@ if(TARGET test_interface_traits)
   target_link_libraries(test_interface_traits ${PROJECT_NAME})
 endif()
 
-# TODO(brawner) remove when destroying Node for Connext is resolved. See:
-# https://github.com/ros2/rclcpp/issues/1250
 ament_add_gtest(
   test_executors
   executors/test_executors.cpp
   APPEND_LIBRARY_DIRS "${append_library_dirs}"
   TIMEOUT 180)
 if(TARGET test_executors)
-  ament_target_dependencies(test_executors
-    "rcl"
-    "test_msgs")
-  target_link_libraries(test_executors ${PROJECT_NAME})
+  target_link_libraries(test_executors ${PROJECT_NAME} rcl::rcl ${test_msgs_TARGETS})
+endif()
+
+ament_add_gtest(
+  test_executors_timer_cancel_behavior
+  executors/test_executors_timer_cancel_behavior.cpp
+  APPEND_LIBRARY_DIRS "${append_library_dirs}"
+  TIMEOUT 180)
+if(TARGET test_executors)
+  target_link_libraries(test_executors_timer_cancel_behavior ${PROJECT_NAME} ${rosgraph_msgs_TARGETS})
 endif()
 
 ament_add_gtest(test_static_single_threaded_executor executors/test_static_single_threaded_executor.cpp
@@ -677,6 +687,17 @@ if(TARGET test_executor_notify_waitable)
     "rcl"
     "test_msgs")
   target_link_libraries(test_executor_notify_waitable ${PROJECT_NAME} mimick)
+endif()
+
+ament_add_gtest(test_events_executor executors/test_events_executor.cpp TIMEOUT 5)
+if(TARGET test_events_executor)
+  target_link_libraries(test_events_executor ${PROJECT_NAME} ${test_msgs_TARGETS})
+endif()
+
+ament_add_gtest(test_events_queue executors/test_events_queue.cpp
+  APPEND_LIBRARY_DIRS "${append_library_dirs}")
+if(TARGET test_events_queue)
+  target_link_libraries(test_events_queue ${PROJECT_NAME})
 endif()
 
 ament_add_gtest(test_guard_condition test_guard_condition.cpp
