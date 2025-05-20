@@ -161,6 +161,8 @@ public:
 
   // next ready event for taking, will be set by is_ready and will be processed by take_data
   std::atomic<size_t> next_ready_event;
+  // used to indicate that next_ready_event has no ready event for processing
+  static constexpr size_t NO_EVENT_READY = std::numeric_limits<size_t>::max();
 
   rclcpp::Context::SharedPtr context_;
   rclcpp::node_interfaces::NodeGraphInterface::WeakPtr node_graph_;
@@ -226,6 +228,7 @@ bool
 ClientBase::wait_for_action_server_nanoseconds(std::chrono::nanoseconds timeout)
 {
   auto start = std::chrono::steady_clock::now();
+  // make an event to reuse, rather than create a new one each time
   auto node_ptr = pimpl_->node_graph_.lock();
   if (!node_ptr) {
     throw rclcpp::exceptions::InvalidNodeError();
@@ -234,7 +237,6 @@ ClientBase::wait_for_action_server_nanoseconds(std::chrono::nanoseconds timeout)
   if (this->action_server_is_ready()) {
     return true;
   }
-  // make an event to reuse, rather than create a new one each time
   auto event = node_ptr->get_graph_event();
   if (timeout == std::chrono::nanoseconds(0)) {
     // check was non-blocking, return immediately
@@ -351,17 +353,7 @@ ClientBase::is_ready(const rcl_wait_set_t & wait_set)
     }
   }
 
-  pimpl_->next_ready_event = std::numeric_limits<size_t>::max();
-
-  if (is_feedback_ready) {
-    pimpl_->next_ready_event = static_cast<size_t>(EntityType::FeedbackSubscription);
-    return true;
-  }
-
-  if (is_status_ready) {
-    pimpl_->next_ready_event = static_cast<size_t>(EntityType::StatusSubscription);
-    return true;
-  }
+  pimpl_->next_ready_event = ClientBaseImpl::NO_EVENT_READY;
 
   if (is_goal_response_ready) {
     pimpl_->next_ready_event = static_cast<size_t>(EntityType::GoalClient);
@@ -375,6 +367,16 @@ ClientBase::is_ready(const rcl_wait_set_t & wait_set)
 
   if (is_cancel_response_ready) {
     pimpl_->next_ready_event = static_cast<size_t>(EntityType::CancelClient);
+    return true;
+  }
+
+  if (is_feedback_ready) {
+    pimpl_->next_ready_event = static_cast<size_t>(EntityType::FeedbackSubscription);
+    return true;
+  }
+
+  if (is_status_ready) {
+    pimpl_->next_ready_event = static_cast<size_t>(EntityType::StatusSubscription);
     return true;
   }
 
@@ -647,10 +649,12 @@ std::shared_ptr<void>
 ClientBase::take_data()
 {
   // next_ready_event is an atomic, caching localy
-  size_t next_ready_event = pimpl_->next_ready_event.exchange(std::numeric_limits<uint32_t>::max());
+  size_t next_ready_event = pimpl_->next_ready_event.exchange(ClientBaseImpl::NO_EVENT_READY);
 
-  if (next_ready_event == std::numeric_limits<uint32_t>::max()) {
-    throw std::runtime_error("Taking data from action client but nothing is ready");
+  if (next_ready_event == ClientBaseImpl::NO_EVENT_READY) {
+    // there is a known bug in iron, that take_data might be called multiple
+    // times. Therefore instead of throwing, we just return a nullptr as a workaround.
+    return nullptr;
   }
 
   return take_data_by_entity_id(next_ready_event);
@@ -751,7 +755,9 @@ void
 ClientBase::execute(const std::shared_ptr<void> & data_in)
 {
   if (!data_in) {
-    throw std::invalid_argument("'data_in' is unexpectedly empty");
+    // workaround, if take_data was called multiple timed, it returns a nullptr
+    // normally we should throw here, but as an API stable bug fix, we just ignore this...
+    return;
   }
 
   std::shared_ptr<ClientBaseData> data_ptr = std::static_pointer_cast<ClientBaseData>(data_in);
@@ -795,6 +801,37 @@ ClientBase::execute(const std::shared_ptr<void> & data_in)
         }
       }
     }, data_ptr->data);
+}
+
+void
+ClientBase::setup_intra_process(
+  uint64_t ipc_action_client_id,
+  IntraProcessManagerWeakPtr weak_ipm)
+{
+  weak_ipm_ = weak_ipm;
+  use_intra_process_ = true;
+  ipc_action_client_id_ = ipc_action_client_id;
+}
+
+rclcpp::Waitable::SharedPtr
+ClientBase::get_intra_process_waitable()
+{
+  std::lock_guard<std::recursive_mutex> lock(ipc_mutex_);
+
+  // If not using intra process, shortcut to nullptr.
+  if (!use_intra_process_) {
+    return nullptr;
+  }
+  // Get the intra process manager.
+  auto ipm = weak_ipm_.lock();
+  if (!ipm) {
+    throw std::runtime_error(
+            "rclcpp_action::ClientBase::get_intra_process_waitable() called "
+            "after destruction of intra process manager");
+  }
+
+  // Use the id to retrieve the intra-process client from the intra-process manager.
+  return ipm->get_action_client_intra_process(ipc_action_client_id_);
 }
 
 }  // namespace rclcpp_action

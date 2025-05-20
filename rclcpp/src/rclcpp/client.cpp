@@ -75,6 +75,13 @@ ClientBase::take_type_erased_response(void * response_out, rmw_request_id_t & re
     &request_header_out,
     response_out);
   if (RCL_RET_CLIENT_TAKE_FAILED == ret) {
+    // If we are here, the most common reason is due the client receiving a response
+    // meant for another client.
+    // Currently all clients with the same service name will get the server reponse.
+    // This impacts performances, since the service response is deserialized and
+    // discarded by clients receiving unwanted responses.
+    //
+    // We silently return here, issue tracked by https://github.com/ros2/rclcpp/issues/2397
     return false;
   } else if (RCL_RET_OK != ret) {
     rclcpp::exceptions::throw_from_rcl_error(ret);
@@ -232,6 +239,37 @@ ClientBase::get_response_subscription_actual_qos() const
     rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(*qos), *qos);
 
   return response_subscription_qos;
+}
+
+void
+ClientBase::setup_intra_process(
+  uint64_t intra_process_client_id,
+  IntraProcessManagerWeakPtr weak_ipm)
+{
+  std::lock_guard<std::recursive_mutex> lock(ipc_mutex_);
+  weak_ipm_ = weak_ipm;
+  use_intra_process_ = true;
+  intra_process_client_id_ = intra_process_client_id;
+}
+
+rclcpp::Waitable::SharedPtr
+ClientBase::get_intra_process_waitable()
+{
+  std::lock_guard<std::recursive_mutex> lock(ipc_mutex_);
+  // If not using intra process, shortcut to nullptr.
+  if (!use_intra_process_) {
+    return nullptr;
+  }
+  // Get the intra process manager.
+  auto ipm = weak_ipm_.lock();
+  if (!ipm) {
+    throw std::runtime_error(
+            "ClientBase::get_intra_process_waitable() called "
+            "after destruction of intra process manager");
+  }
+
+  // Use the id to retrieve the intra-process client from the intra-process manager.
+  return ipm->get_client_intra_process(intra_process_client_id_);
 }
 
 void

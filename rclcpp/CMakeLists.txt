@@ -39,9 +39,12 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 set(${PROJECT_NAME}_SRCS
+  src/rclcpp/action_client_intra_process_base.cpp
+  src/rclcpp/action_server_intra_process_base.cpp
   src/rclcpp/any_executable.cpp
   src/rclcpp/callback_group.cpp
   src/rclcpp/client.cpp
+  src/rclcpp/client_intra_process_base.cpp
   src/rclcpp/clock.cpp
   src/rclcpp/context.cpp
   src/rclcpp/contexts/default_context.cpp
@@ -116,6 +119,7 @@ set(${PROJECT_NAME}_SRCS
   src/rclcpp/serialization.cpp
   src/rclcpp/serialized_message.cpp
   src/rclcpp/service.cpp
+  src/rclcpp/service_intra_process_base.cpp
   src/rclcpp/signal_handler.cpp
   src/rclcpp/subscription_base.cpp
   src/rclcpp/subscription_intra_process_base.cpp
@@ -285,8 +289,14 @@ ament_export_dependencies(
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
+  file(GLOB_RECURSE AMENT_LINT_AUTO_FILE_EXCLUDE
+    include/rclcpp/experimental/executors/events_executor/concurrent_queue/*.h)
   ament_lint_auto_find_test_dependencies()
 
+  message(AUTHOR_WARNING
+  "Ament lint auto tests are disabled on the following: "
+  ${AMENT_LINT_AUTO_FILE_EXCLUDE}
+)
   add_subdirectory(test)
 endif()
 

@@ -124,7 +124,7 @@ public:
         });
 
       type_description_srv_ = std::make_shared<Service<ServiceT>>(
-        node_base_->get_shared_rcl_node_handle(),
+        node_base_,
         rcl_srv,
         cb);
       node_services->add_service(

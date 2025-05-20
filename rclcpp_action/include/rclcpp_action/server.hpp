@@ -21,8 +21,14 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
+// Check what I need
+#include "action_msgs/msg/goal_status_array.hpp"
 #include "action_msgs/srv/cancel_goal.hpp"
+#include "rclcpp/experimental/action_server_intra_process.hpp"
+#include "rclcpp/intra_process_setting.hpp"
+
 #include "rcl/event_callback.h"
 #include "rcl_action/action_server.h"
 #include "rosidl_runtime_c/action_type_support_struct.h"
@@ -176,6 +182,36 @@ public:
   void
   clear_on_ready_callback() override;
 
+  using IntraProcessManagerWeakPtr =
+    std::weak_ptr<rclcpp::experimental::IntraProcessManager>;
+
+  /// Implementation detail.
+  RCLCPP_PUBLIC
+  void
+  setup_intra_process(
+    uint64_t ipc_actionserver_id,
+    IntraProcessManagerWeakPtr weak_ipm);
+
+  /// Return the waitable for intra-process
+  /**
+   * \return the waitable sharedpointer for intra-process, or nullptr if intra-process is not setup.
+   * \throws std::runtime_error if the intra process manager is destroyed
+   */
+  RCLCPP_PUBLIC
+  rclcpp::Waitable::SharedPtr
+  get_intra_process_waitable();
+
+  std::shared_ptr<rclcpp::experimental::IntraProcessManager>
+  lock_intra_process_manager()
+  {
+    auto ipm = weak_ipm_.lock();
+    if (!ipm) {
+      throw std::runtime_error(
+              "Intra-process manager already destroyed");
+    }
+    return ipm;
+  }
+
   // End Waitables API
   // -----------------
 
@@ -255,6 +291,11 @@ protected:
 
   /// \internal
   RCLCPP_ACTION_PUBLIC
+  std::shared_ptr<action_msgs::msg::GoalStatusArray>
+  get_status_array();
+
+  /// \internal
+  RCLCPP_ACTION_PUBLIC
   void
   publish_status();
 
@@ -272,6 +313,20 @@ protected:
   RCLCPP_ACTION_PUBLIC
   void
   publish_feedback(std::shared_ptr<void> feedback_msg);
+
+  /// Temporary workaround
+  /// \internal
+  RCLCPP_ACTION_PUBLIC
+  std::shared_ptr<rcl_action_goal_handle_t>
+  get_rcl_action_goal_handle(
+    rcl_action_goal_info_t goal_info,
+    GoalUUID uuid);
+
+  /// Addition
+  /// \internal
+  RCLCPP_ACTION_PUBLIC
+  std::shared_ptr<action_msgs::srv::CancelGoal::Response>
+  process_cancel_request(rcl_action_cancel_request_t & cancel_request);
 
   // End API for communication between ServerBase and Server<>
   // ---------------------------------------------------------
@@ -337,6 +392,12 @@ protected:
     const void * user_data);
 
   bool on_ready_callback_set_{false};
+
+  // Intra-process action server data fields
+  std::recursive_mutex ipc_mutex_;
+  bool use_intra_process_{false};
+  IntraProcessManagerWeakPtr weak_ipm_;
+  uint64_t ipc_action_server_id_;
 };
 
 /// Action Server
@@ -363,6 +424,26 @@ public:
   using CancelCallback = std::function<CancelResponse(std::shared_ptr<ServerGoalHandle<ActionT>>)>;
   /// Signature of a callback that is used to notify when the goal has been accepted.
   using AcceptedCallback = std::function<void (std::shared_ptr<ServerGoalHandle<ActionT>>)>;
+
+  using ResponseCallback = std::function<void (std::shared_ptr<void> response)>;
+
+  using GoalRequest = typename ActionT::Impl::SendGoalService::Request;
+  using GoalRequestSharedPtr = typename std::shared_ptr<GoalRequest>;
+  using GoalRequestDataPair = typename std::pair<uint64_t, GoalRequestSharedPtr>;
+  using GoalRequestDataPairSharedPtr = typename std::shared_ptr<GoalRequestDataPair>;
+
+  using ResultRequest = typename ActionT::Impl::GetResultService::Request;
+  using ResultRequestSharedPtr = typename std::shared_ptr<ResultRequest>;
+  using ResultRequestDataPair = typename std::pair<uint64_t, ResultRequestSharedPtr>;
+  using ResultRequestDataPairSharedPtr = typename std::shared_ptr<ResultRequestDataPair>;
+
+  using CancelRequest = typename ActionT::Impl::CancelGoalService::Request;
+  using CancelRequestSharedPtr = typename std::shared_ptr<CancelRequest>;
+  using CancelRequestDataPair = typename std::pair<uint64_t, CancelRequestSharedPtr>;
+  using CancelRequestDataPairSharedPtr = typename std::shared_ptr<CancelRequestDataPair>;
+
+  using ResultResponse = typename ActionT::Impl::GetResultService::Response;
+  using ResultResponseSharedPtr = typename std::shared_ptr<ResultResponse>;
 
   /// Construct an action server.
   /**
@@ -398,8 +479,8 @@ public:
     const rcl_action_server_options_t & options,
     GoalCallback handle_goal,
     CancelCallback handle_cancel,
-    AcceptedCallback handle_accepted
-  )
+    AcceptedCallback handle_accepted,
+    rclcpp::IntraProcessSetting ipc_setting = rclcpp::IntraProcessSetting::NodeDefault)
   : ServerBase(
       node_base,
       node_clock,
@@ -411,13 +492,350 @@ public:
     handle_cancel_(handle_cancel),
     handle_accepted_(handle_accepted)
   {
+    // Setup intra process if requested.
+    if (rclcpp::detail::resolve_use_intra_process(ipc_setting, *node_base)) {
+      create_intra_process_action_server(node_base, name, options);
+    }
   }
 
-  virtual ~Server() = default;
+  virtual ~Server()
+  {
+    if (!use_intra_process_) {
+      return;
+    }
+    auto ipm = lock_intra_process_manager();
+    ipm->remove_action_server(ipc_action_server_id_);
+  }
 
 protected:
+  // Intra-process version of execute_goal_request_received_
+  // Missing: Deep comparison of functionality betwen IPC on/off
+  void
+  ipc_execute_goal_request_received(GoalRequestDataPairSharedPtr data)
+  {
+    uint64_t intra_process_action_client_id = data->first;
+    GoalRequestSharedPtr goal_request = data->second;
+
+    rcl_action_goal_info_t goal_info = rcl_action_get_zero_initialized_goal_info();
+    GoalUUID uuid = get_goal_id_from_goal_request(goal_request.get());
+    convert(uuid, &goal_info);
+
+    // Call user's callback, getting the user's response and a ros message to send back
+    auto response_pair = call_handle_goal_callback(uuid, goal_request);
+
+    using Response = typename ActionT::Impl::SendGoalService::Response;
+    auto goal_response = std::static_pointer_cast<Response>(response_pair.second);
+
+    auto ipm = lock_intra_process_manager();
+
+    ipm->template intra_process_action_send_goal_response<ActionT>(
+      intra_process_action_client_id,
+      std::move(goal_response),
+      std::hash<GoalUUID>()(uuid));
+
+    const auto user_response = response_pair.first;
+
+    // if goal is accepted, create a goal handle, and store it
+    if (GoalResponse::ACCEPT_AND_EXECUTE == user_response ||
+      GoalResponse::ACCEPT_AND_DEFER == user_response)
+    {
+      RCLCPP_DEBUG(
+        rclcpp::get_logger("rclcpp_action"), "Accepted goal %s", to_string(uuid).c_str());
+
+      // Hack: Get rcl goal handle for simplicity
+      auto handle = this->get_rcl_action_goal_handle(goal_info, uuid);
+
+      if (user_response == GoalResponse::ACCEPT_AND_EXECUTE) {
+        // Change status to executing
+        rcl_ret_t ret = rcl_action_update_goal_state(handle.get(), GOAL_EVENT_EXECUTE);
+        if (RCL_RET_OK != ret) {
+          rclcpp::exceptions::throw_from_rcl_error(ret);
+        }
+      }
+
+      // publish status since a goal's state has changed (was accepted or has begun execution)
+      // This part would be the IPC version of publish_status();
+      auto status_msg = this->get_status_array();
+
+      ipm->template intra_process_action_publish_status<ActionT>(
+        intra_process_action_client_id,
+        std::move(status_msg));
+
+      call_goal_accepted_callback(handle, uuid, std::static_pointer_cast<void>(goal_request));
+    }
+  }
+
+
+  // Intra-process version of execute_cancel_request_received_
+  // Missing: Deep comparison of functionality betwen IPC on/off
+  void
+  ipc_execute_cancel_request_received(CancelRequestDataPairSharedPtr data)
+  {
+    uint64_t intra_process_action_client_id = data->first;
+    CancelRequestSharedPtr request = data->second;
+
+    auto ipm = lock_intra_process_manager();
+
+    // Convert c++ message to C message
+    rcl_action_cancel_request_t cancel_request = rcl_action_get_zero_initialized_cancel_request();
+    convert(request->goal_info.goal_id.uuid, &cancel_request.goal_info);
+    cancel_request.goal_info.stamp.sec = request->goal_info.stamp.sec;
+    cancel_request.goal_info.stamp.nanosec = request->goal_info.stamp.nanosec;
+
+    auto response = process_cancel_request(cancel_request);
+
+    if (!response->goals_canceling.empty()) {
+      // at least one goal state changed, publish a new status message
+      auto status_msg = this->get_status_array();
+
+      ipm->template intra_process_action_publish_status<ActionT>(
+        intra_process_action_client_id,
+        std::move(status_msg));
+    }
+
+    GoalUUID uuid = request->goal_info.goal_id.uuid;
+
+    ipm->template intra_process_action_send_cancel_response<ActionT>(
+      intra_process_action_client_id,
+      std::move(response),
+      std::hash<GoalUUID>()(uuid));
+  }
+
+  ResultResponseSharedPtr
+  get_result_response(size_t goal_id)
+  {
+    auto it = ipc_goal_results_.find(goal_id);
+    if (it != ipc_goal_results_.end()) {
+      auto result = it->second;
+      ipc_goal_results_.erase(it);
+      return result;
+    }
+
+    return nullptr;
+  }
+
+  // Intra-process version of execute_result_request_received_
+  // See if we can call the server.cpp version of it without doing rcl_action_send_result_response
+  void
+  ipc_execute_result_request_received(ResultRequestDataPairSharedPtr data)
+  {
+    uint64_t intra_process_action_client_id = data->first;
+    ResultRequestSharedPtr result_request = data->second;
+
+    // check if the goal exists. How?
+    GoalUUID uuid = get_goal_id_from_result_request(result_request.get());
+    size_t hashed_uuid = std::hash<GoalUUID>()(uuid);
+
+    std::lock_guard<std::recursive_mutex> lock(goal_handles_mutex_);
+
+    ResultResponseSharedPtr result_response = get_result_response(hashed_uuid);
+
+    // Check if a result is already available. If not, it will
+    // be sent when ready in the on_terminal_state callback below.
+    if (result_response) {
+      // Send the result now
+      auto ipm = lock_intra_process_manager();
+
+      auto typed_response = std::static_pointer_cast<ResultResponse>(result_response);
+      ipm->template intra_process_action_send_result_response<ActionT>(
+        intra_process_action_client_id,
+        std::move(typed_response),
+        hashed_uuid);
+    } else {
+      goals_result_requested_.push_back(hashed_uuid);
+    }
+  }
+
+  bool
+  client_requested_response(size_t goal_id, ResultResponseSharedPtr typed_result)
+  {
+    std::lock_guard<std::recursive_mutex> lock(goal_handles_mutex_);
+
+    for (auto it = goals_result_requested_.begin(); it != goals_result_requested_.end(); ++it) {
+      if (*it == goal_id) {
+        goals_result_requested_.erase(it);
+        return true;
+      }
+    }
+
+    // The cliend didn't ask fo response yet, so store it to send later
+    ipc_goal_results_[goal_id] = typed_result;
+    return false;
+  }
+
+  bool
+  ipc_on_terminal_state(const GoalUUID & goal_uuid, std::shared_ptr<void> result_message)
+  {
+    auto ipm = lock_intra_process_manager();
+
+    size_t hashed_uuid = std::hash<GoalUUID>()(goal_uuid);
+
+    uint64_t ipc_action_client_id = ipm->get_action_client_id_from_goal_uuid(hashed_uuid);
+
+    if (ipc_action_client_id) {
+      auto typed_result = std::static_pointer_cast<ResultResponse>(result_message);
+
+      if (client_requested_response(hashed_uuid, typed_result)) {
+        ipm->template intra_process_action_send_result_response<ActionT>(
+          ipc_action_client_id,
+          std::move(typed_result),
+          hashed_uuid);
+
+        auto status_msg = this->get_status_array();
+
+        ipm->template intra_process_action_publish_status<ActionT>(
+          ipc_action_client_id,
+          std::move(status_msg));
+
+        ipm->remove_intra_process_action_client_goal_uuid(hashed_uuid);
+      }
+
+      return false;
+    }
+
+    RCLCPP_DEBUG(
+      rclcpp::get_logger("rclcpp_action"),
+      "Action server can't send result response, missing IPC Action client: %s. "
+      "Will do inter-process publish",
+      this->action_name_.c_str());
+
+    return true;
+  }
+
+  bool
+  ipc_on_executing(const GoalUUID & goal_uuid)
+  {
+    auto ipm = lock_intra_process_manager();
+
+    size_t hashed_uuid = std::hash<GoalUUID>()(goal_uuid);
+
+    uint64_t ipc_action_client_id = ipm->get_action_client_id_from_goal_uuid(hashed_uuid);
+
+    if (ipc_action_client_id) {
+      // This part would be the IPC version of publish_status();
+      auto status_msg = this->get_status_array();
+
+      ipm->template intra_process_action_publish_status<ActionT>(
+        ipc_action_client_id,
+        std::move(status_msg));
+      return false;
+    }
+
+    return true;
+  }
+
+
+  bool
+  ipc_publish_feedback(typename ActionT::Impl::FeedbackMessage::SharedPtr feedback_msg)
+  {
+    auto ipm = lock_intra_process_manager();
+
+    size_t hashed_uuid = std::hash<GoalUUID>()(feedback_msg->goal_id.uuid);
+
+    uint64_t ipc_action_client_id = ipm->get_action_client_id_from_goal_uuid(hashed_uuid);
+
+    if (ipc_action_client_id) {
+      ipm->template intra_process_action_publish_feedback<ActionT>(
+          ipc_action_client_id,
+          std::move(feedback_msg));
+      return false;
+    }
+
+    return true;
+  }
+
   // -----------------------------------------------------
   // API for communication between ServerBase and Server<>
+
+  /// \internal
+  void
+  call_goal_accepted_callback(
+    std::shared_ptr<rcl_action_goal_handle_t> rcl_goal_handle,
+    GoalUUID uuid,
+    std::shared_ptr<void> goal_request_message) override
+  {
+    std::shared_ptr<ServerGoalHandle<ActionT>> goal_handle;
+    std::weak_ptr<Server<ActionT>> weak_this = this->shared_from_this();
+
+    // Define callbacks for the ServerGoalHandle, which will be called from the user APP when
+    // for example goal_handle->succeed(result) or goal_handle->publish_feedback(feedback);
+    auto on_terminal_state =
+      [weak_this](const GoalUUID & goal_uuid, std::shared_ptr<void> result_message)
+      {
+        std::shared_ptr<Server<ActionT>> shared_this = weak_this.lock();
+        if (!shared_this) {
+          return;
+        }
+
+        bool send_inter_process_needed = true;
+        std::lock_guard<std::recursive_mutex> ipc_lock(shared_this->ipc_mutex_);
+
+        if (shared_this->use_intra_process_) {
+          send_inter_process_needed = shared_this->ipc_on_terminal_state(goal_uuid, result_message);
+        }
+        if (send_inter_process_needed) {
+        // Send result message to anyone that asked
+          shared_this->publish_result(goal_uuid, result_message);
+        // Publish a status message any time a goal handle changes state
+          shared_this->publish_status();
+        }
+
+        // notify base so it can recalculate the expired goal timer
+        shared_this->notify_goal_terminal_state();
+
+        // Delete data now (ServerBase and rcl_action_server_t keep data until goal handle expires)
+        std::lock_guard<std::recursive_mutex> lock(shared_this->goal_handles_mutex_);
+        shared_this->goal_handles_.erase(goal_uuid);
+      };
+
+    auto on_executing =
+      [weak_this](const GoalUUID & goal_uuid)
+      {
+        std::shared_ptr<Server<ActionT>> shared_this = weak_this.lock();
+        if (!shared_this) {
+          return;
+        }
+
+        bool send_inter_process_needed = true;
+        if (shared_this->use_intra_process_) {
+          send_inter_process_needed = shared_this->ipc_on_executing(goal_uuid);
+        }
+        if (send_inter_process_needed) {
+          shared_this->publish_status();
+        }
+      };
+
+    using FeedbackMsg = typename ActionT::Impl::FeedbackMessage::SharedPtr;
+
+    auto publish_feedback =
+      [weak_this](FeedbackMsg feedback_msg)
+      {
+        std::shared_ptr<Server<ActionT>> shared_this = weak_this.lock();
+        if (!shared_this) {
+          return;
+        }
+
+        bool send_inter_process_needed = true;
+        if (shared_this->use_intra_process_) {
+          send_inter_process_needed = shared_this->ipc_publish_feedback(feedback_msg);
+        }
+        if (send_inter_process_needed) {
+          shared_this->publish_feedback(std::static_pointer_cast<void>(feedback_msg));
+        }
+      };
+
+    auto request = std::static_pointer_cast<
+      const typename ActionT::Impl::SendGoalService::Request>(goal_request_message);
+    auto goal = std::shared_ptr<const typename ActionT::Goal>(request, &request->goal);
+    goal_handle.reset(
+      new ServerGoalHandle<ActionT>(
+        rcl_goal_handle, uuid, goal, on_terminal_state, on_executing, publish_feedback));
+    {
+      std::lock_guard<std::recursive_mutex> lock(goal_handles_mutex_);
+      goal_handles_[uuid] = goal_handle;
+    }
+    handle_accepted_(goal_handle);
+  }
 
   /// \internal
   std::pair<GoalResponse, std::shared_ptr<void>>
@@ -440,7 +858,7 @@ protected:
   {
     std::shared_ptr<ServerGoalHandle<ActionT>> goal_handle;
     {
-      std::lock_guard<std::mutex> lock(goal_handles_mutex_);
+      std::lock_guard<std::recursive_mutex> lock(goal_handles_mutex_);
       auto element = goal_handles_.find(uuid);
       if (element != goal_handles_.end()) {
         goal_handle = element->second.lock();
@@ -462,69 +880,6 @@ protected:
       }
     }
     return resp;
-  }
-
-  /// \internal
-  void
-  call_goal_accepted_callback(
-    std::shared_ptr<rcl_action_goal_handle_t> rcl_goal_handle,
-    GoalUUID uuid,
-    std::shared_ptr<void> goal_request_message) override
-  {
-    std::shared_ptr<ServerGoalHandle<ActionT>> goal_handle;
-    std::weak_ptr<Server<ActionT>> weak_this = this->shared_from_this();
-
-    std::function<void(const GoalUUID &, std::shared_ptr<void>)> on_terminal_state =
-      [weak_this](const GoalUUID & goal_uuid, std::shared_ptr<void> result_message)
-      {
-        std::shared_ptr<Server<ActionT>> shared_this = weak_this.lock();
-        if (!shared_this) {
-          return;
-        }
-        // Send result message to anyone that asked
-        shared_this->publish_result(goal_uuid, result_message);
-        // Publish a status message any time a goal handle changes state
-        shared_this->publish_status();
-        // notify base so it can recalculate the expired goal timer
-        shared_this->notify_goal_terminal_state();
-        // Delete data now (ServerBase and rcl_action_server_t keep data until goal handle expires)
-        std::lock_guard<std::mutex> lock(shared_this->goal_handles_mutex_);
-        shared_this->goal_handles_.erase(goal_uuid);
-      };
-
-    std::function<void(const GoalUUID &)> on_executing =
-      [weak_this](const GoalUUID & goal_uuid)
-      {
-        std::shared_ptr<Server<ActionT>> shared_this = weak_this.lock();
-        if (!shared_this) {
-          return;
-        }
-        (void)goal_uuid;
-        // Publish a status message any time a goal handle changes state
-        shared_this->publish_status();
-      };
-
-    std::function<void(std::shared_ptr<typename ActionT::Impl::FeedbackMessage>)> publish_feedback =
-      [weak_this](std::shared_ptr<typename ActionT::Impl::FeedbackMessage> feedback_msg)
-      {
-        std::shared_ptr<Server<ActionT>> shared_this = weak_this.lock();
-        if (!shared_this) {
-          return;
-        }
-        shared_this->publish_feedback(std::static_pointer_cast<void>(feedback_msg));
-      };
-
-    auto request = std::static_pointer_cast<
-      const typename ActionT::Impl::SendGoalService::Request>(goal_request_message);
-    auto goal = std::shared_ptr<const typename ActionT::Goal>(request, &request->goal);
-    goal_handle.reset(
-      new ServerGoalHandle<ActionT>(
-        rcl_goal_handle, uuid, goal, on_terminal_state, on_executing, publish_feedback));
-    {
-      std::lock_guard<std::mutex> lock(goal_handles_mutex_);
-      goal_handles_[uuid] = goal_handle;
-    }
-    handle_accepted_(goal_handle);
   }
 
   /// \internal
@@ -578,7 +933,78 @@ private:
   /// A map of goal id to goal handle weak pointers.
   /// This is used to provide a goal handle to handle_cancel.
   std::unordered_map<GoalUUID, GoalHandleWeakPtr> goal_handles_;
-  std::mutex goal_handles_mutex_;
+  std::recursive_mutex goal_handles_mutex_;
+  std::string action_name_;
+
+  // Declare the intra-process action server
+  using ActionServerIntraProcessT = rclcpp::experimental::ActionServerIntraProcess<ActionT>;
+  std::shared_ptr<ActionServerIntraProcessT> ipc_action_server_;
+  std::recursive_mutex ipc_mutex_;
+  bool use_intra_process_{false};
+
+  // Map to store results until the client request it
+  std::unordered_map<size_t, ResultResponseSharedPtr> ipc_goal_results_;
+  // The goals for which the client has requested the result
+  std::vector<size_t> goals_result_requested_;
+
+  void
+  create_intra_process_action_server(
+    rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base,
+    const std::string & name,
+    const rcl_action_server_options_t & options)
+  {
+    // Setup intra process if requested.
+    auto keep_last = RMW_QOS_POLICY_HISTORY_KEEP_LAST;
+    if (options.goal_service_qos.history != keep_last ||
+      options.result_service_qos.history != keep_last ||
+      options.cancel_service_qos.history != keep_last)
+    {
+      throw std::invalid_argument(
+              "intraprocess communication allowed only with keep last history qos policy");
+    }
+
+    if (options.goal_service_qos.depth == 0 ||
+      options.result_service_qos.depth == 0 ||
+      options.cancel_service_qos.depth == 0)
+    {
+      throw std::invalid_argument(
+              "intraprocess communication is not allowed with 0 depth qos policy");
+    }
+
+    auto durability_vol = RMW_QOS_POLICY_DURABILITY_VOLATILE;
+    if (options.goal_service_qos.durability != durability_vol ||
+      options.result_service_qos.durability != durability_vol ||
+      options.cancel_service_qos.durability != durability_vol)
+    {
+      throw std::invalid_argument(
+              "intraprocess communication allowed only with volatile durability");
+    }
+
+    rcl_action_server_depth_t qos_history;
+    qos_history.goal_service_depth = options.goal_service_qos.depth;
+    qos_history.result_service_depth = options.result_service_qos.depth;
+    qos_history.cancel_service_depth = options.cancel_service_qos.depth;
+
+    std::lock_guard<std::recursive_mutex> lock(goal_handles_mutex_);
+
+    use_intra_process_ = true;
+
+    action_name_ = node_base->resolve_topic_or_service_name(name, true);
+    // Create a ActionClientIntraProcess which will be given
+    // to the intra-process manager.
+    auto context = node_base->get_context();
+    ipc_action_server_ = std::make_shared<ActionServerIntraProcessT>(
+      context, action_name_, qos_history,
+      std::bind(&Server::ipc_execute_goal_request_received, this, std::placeholders::_1),
+      std::bind(&Server::ipc_execute_cancel_request_received, this, std::placeholders::_1),
+      std::bind(&Server::ipc_execute_result_request_received, this, std::placeholders::_1));
+
+    // Add it to the intra process manager.
+    using rclcpp::experimental::IntraProcessManager;
+    auto ipm = context->get_sub_context<IntraProcessManager>();
+    uint64_t ipc_action_client_id = ipm->add_intra_process_action_server(ipc_action_server_);
+    this->setup_intra_process(ipc_action_client_id, ipm);
+  }
 };
 }  // namespace rclcpp_action
 #endif  // RCLCPP_ACTION__SERVER_HPP_
