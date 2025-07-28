@@ -2,6 +2,17 @@
 Changelog for package rclcpp
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+28.1.10 (2025-06-23)
+--------------------
+* Fix for memory leaks in rclcpp::SerializedMessage (`#2861 <https://github.com/ros2/rclcpp/issues/2861>`_) (`#2864 <https://github.com/ros2/rclcpp/issues/2864>`_)
+* Added missing chrono includes (`#2854 <https://github.com/ros2/rclcpp/issues/2854>`_) (`#2856 <https://github.com/ros2/rclcpp/issues/2856>`_)
+* get_all_data_impl() does not handle null pointers properly, causing segmentation fault (backport `#2840 <https://github.com/ros2/rclcpp/issues/2840>`_) (`#2851 <https://github.com/ros2/rclcpp/issues/2851>`_)
+* QoSInitialization::from_rmw does not validate invalid history policy values, leading to silent failures (`#2841 <https://github.com/ros2/rclcpp/issues/2841>`_) (`#2845 <https://github.com/ros2/rclcpp/issues/2845>`_)
+* throws std::invalid_argument if ParameterEvent is NULL. (`#2814 <https://github.com/ros2/rclcpp/issues/2814>`_) (`#2825 <https://github.com/ros2/rclcpp/issues/2825>`_)
+* Merge pull request `#2821 <https://github.com/ros2/rclcpp/issues/2821>`_ from ros2/mergify/bp/jazzy/pr-2819
+* Fix race condition (`#2819 <https://github.com/ros2/rclcpp/issues/2819>`_)
+* Contributors: Michael Orlov, Pedro de Azeredo, mergify[bot]
+
 28.1.9 (2025-04-23)
 -------------------
 * remove redundant typesupport check in serialization module (`#2808 <https://github.com/ros2/rclcpp/issues/2808>`_) (`#2815 <https://github.com/ros2/rclcpp/issues/2815>`_)
