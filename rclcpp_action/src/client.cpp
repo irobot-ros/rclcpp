@@ -354,6 +354,16 @@ ClientBase::is_ready(const rcl_wait_set_t & wait_set)
   }
 
   pimpl_->next_ready_event = ClientBaseImpl::NO_EVENT_READY;
+  // The following 'if' statements set the priority of execution for different entities.
+  // The order of priority for action components are:
+  //   Status > Goal Response > Result Response > Cancel Response > Feedback.
+  // Feedback has the lowest priority, since if the client spins slower than the
+  // server's feedback rate, it may never process the action results.
+  
+  if (is_status_ready) {
+    pimpl_->next_ready_event = static_cast<size_t>(EntityType::StatusSubscription);
+    return true;
+  }
 
   if (is_goal_response_ready) {
     pimpl_->next_ready_event = static_cast<size_t>(EntityType::GoalClient);
@@ -372,11 +382,6 @@ ClientBase::is_ready(const rcl_wait_set_t & wait_set)
 
   if (is_feedback_ready) {
     pimpl_->next_ready_event = static_cast<size_t>(EntityType::FeedbackSubscription);
-    return true;
-  }
-
-  if (is_status_ready) {
-    pimpl_->next_ready_event = static_cast<size_t>(EntityType::StatusSubscription);
     return true;
   }
 
